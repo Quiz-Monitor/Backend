@@ -1,0 +1,127 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    USER ||--o{ EXAM : creates
+    USER ||--o{ EXAM_ATTEMPT : performs
+    
+    EXAM ||--o{ QUESTION : contains
+    EXAM ||--o{ EXAM_ATTEMPT : has
+    
+    EXAM_ATTEMPT ||--o{ QUESTION_ANSWER : contains
+    EXAM_ATTEMPT ||--o{ VIOLATION_EVENT : has
+    
+    QUESTION ||--o{ QUESTION_ANSWER : answered_in
+    QUESTION ||--o{ CHOICE : has
+    
+    QUESTION_ANSWER ||--o{ ANSWER_VIOLATION : has
+    
+    USER {
+        int user_id PK
+        string email UK
+        string password_hash
+        string full_name
+        string role
+        string phone_number
+        string profile_picture
+        datetime last_login
+        datetime created_at
+        datetime updated_at
+    }
+    
+    EXAM {
+        int exam_id PK
+        int instructor_id FK
+        string exam_code UK
+        string title
+        text description
+        int duration_minutes
+        datetime start_time
+        datetime end_time
+        boolean camera_required
+        boolean tab_switching_detection
+        boolean eye_tracking_enabled
+        boolean multiple_person_detection
+        int max_tab_switches
+        int max_eye_away_seconds
+        datetime created_at
+        datetime updated_at
+        boolean is_published
+    }
+    
+    QUESTION {
+        int question_id PK
+        int exam_id FK
+        string question_type
+        text question_text
+        text question_image_url
+        int points
+        int order_number
+        boolean is_required
+        datetime created_at
+    }
+    
+    CHOICE {
+        int choice_id PK
+        int question_id FK
+        text choice_text
+        boolean is_correct
+        int order_number
+    }
+    
+    EXAM_ATTEMPT {
+        int attempt_id PK
+        int exam_id FK
+        int student_id FK
+        datetime start_time
+        datetime submit_time
+        int total_duration_seconds
+        float mcq_score
+        float manual_score
+        float final_score
+        string status
+        int total_violations
+        int tab_switch_count
+        int eye_away_count
+        int object_detected_count
+        int multiple_person_count
+        text instructor_notes
+        boolean is_graded
+        datetime graded_at
+        int graded_by FK
+    }
+    
+    QUESTION_ANSWER {
+        int answer_id PK
+        int attempt_id FK
+        int question_id FK
+        text answer_text
+        text selected_choices
+        float score
+        boolean is_correct
+        datetime started_at
+        datetime answered_at
+        int time_spent_seconds
+        int violation_count
+        text instructor_feedback
+        boolean is_manually_graded
+    }
+    
+    VIOLATION_EVENT {
+        int violation_id PK
+        int attempt_id FK
+        int question_id FK
+        string violation_type
+        datetime timestamp
+        text description
+        text screenshot_url
+        int duration_seconds
+        text metadata
+    }
+    
+    ANSWER_VIOLATION {
+        int answer_violation_id PK
+        int answer_id FK
+        int violation_id FK
+    }
