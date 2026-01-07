@@ -1,4 +1,4 @@
-#  Authentication & Users
+# 1- Authentication & Users (~3)
 
 ##  Register
 
@@ -76,7 +76,7 @@
 
 ---
 
-#  Exam Management (Instructor)
+# 2- Exam Management (Instructor) (~ 5)
 
 ##  Create Exam
 
@@ -131,6 +131,71 @@
 }
 ```
 
+**Response**
+
+```json
+{
+  "questionId": 20,
+  "questionType": "MCQ_SINGLE",
+  "questionText": "What is the time complexity of binary search?",
+  "points": 5,
+  "orderNumber": 1,
+  "createdAt": "2025-01-10T14:30:00Z"
+}
+```
+
+---
+
+##  Update Question
+
+`PUT /api/exams/{examId}/questions/{questionId}`
+
+**Request**
+
+```json
+{
+  "questionType": "MCQ_SINGLE",
+  "questionText": "What is the average time complexity of binary search?",
+  "points": 10,
+  "orderNumber": 1,
+  "choices": [
+    { "choiceId": 1, "text": "O(n)", "isCorrect": false, "orderNumber": 1},
+    { "choiceId": 2, "text": "O(log n)", "isCorrect": true, "orderNumber": 2 },
+    { "choiceId": 3, "text": "O(n log n)", "isCorrect": false, "orderNumber": 3 },
+    { "text": "O(1)", "isCorrect": false, "orderNumber": 4 }
+  ]
+}
+```
+
+**Response**
+
+```json
+{
+  "questionId": 20,
+  "questionType": "MCQ_SINGLE",
+  "questionText": "What is the average time complexity of binary search?",
+  "points": 10,
+  "orderNumber": 1,
+  "updatedAt": "2025-01-10T15:45:00Z"
+}
+```
+
+---
+
+##  Remove Question
+
+`DELETE /api/exams/{examId}/questions/{questionId}`
+
+**Response**
+
+```json
+{
+  "message": "Question deleted successfully",
+  "questionId": 20,
+  "examId": 5
+}
+```
+
 ---
 
 ##  Publish Exam
@@ -149,7 +214,7 @@
 
 ---
 
-#  Exam Participation (Student)
+#  Exam Participation (Student) (~6)
 
 ##  Join Exam by Code
 
@@ -318,7 +383,7 @@
 
 ---
 
-#  Grading & Results (Instructor)
+# 3- Grading & Results (Instructor) (~5)
 
 ##  View Exam Results
 
@@ -396,7 +461,7 @@
 
 ---
 
-# Student Results
+# 4- Student Results
 
 ##  My Exam Results
 
@@ -417,7 +482,7 @@
 ---
 
 
-# Notifications
+# 5- Notifications (~6)
 
 ## Get User Notifications
 
