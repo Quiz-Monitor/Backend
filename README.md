@@ -64,9 +64,15 @@ cd QuizMonitor.API
 dotnet run
 ```
 
-The API will be available at:
-- HTTP: `http://localhost:5000`
-- HTTPS: `https://localhost:5001`
+The API will automatically open Swagger UI in your browser at:
+- **HTTPS (Default):** `https://localhost:7158/swagger`
+- **HTTP:** `http://localhost:5149/swagger`
+
+You can also access the root URL which will redirect to Swagger:
+- `https://localhost:7158/` → redirects to Swagger UI
+- `http://localhost:5149/` → redirects to Swagger UI
+
+**Note:** The ports (7158 for HTTPS, 5149 for HTTP) are configured in `Properties/launchSettings.json`.
 
 ## Environment Variables
 
@@ -98,9 +104,11 @@ dotnet ef database update
 
 ## API Documentation
 
-Once the API is running, you can access:
-- **Swagger UI:** `https://localhost:5001/swagger` (in Development mode)
+Once the API is running, Swagger UI will open automatically. You can also manually access:
+- **Swagger UI:** `https://localhost:7158/swagger` (Development mode)
 - **API Design:** See `api_design.md` for detailed endpoint specifications
+
+The Swagger UI provides interactive documentation where you can test all endpoints directly from your browser.
 
 ## Project Layers
 
