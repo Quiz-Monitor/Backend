@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "sOYYFOSkSAg=",
+  "dgSpecHash": "r5Q5CxEo90M=",
   "success": true,
   "projectFilePath": "/home/mahmoud/Graduation_Project/QuizMonitor.DAL/QuizMonitor.DAL.csproj",
   "expectedPackageFiles": [
@@ -48,6 +48,8 @@
     "/home/mahmoud/.nuget/packages/microsoft.sqlserver.server/1.0.0/microsoft.sqlserver.server.1.0.0.nupkg.sha512",
     "/home/mahmoud/.nuget/packages/microsoft.win32.systemevents/6.0.0/microsoft.win32.systemevents.6.0.0.nupkg.sha512",
     "/home/mahmoud/.nuget/packages/mono.texttemplating/3.0.0/mono.texttemplating.3.0.0.nupkg.sha512",
+    "/home/mahmoud/.nuget/packages/npgsql/9.0.0/npgsql.9.0.0.nupkg.sha512",
+    "/home/mahmoud/.nuget/packages/npgsql.entityframeworkcore.postgresql/9.0.0/npgsql.entityframeworkcore.postgresql.9.0.0.nupkg.sha512",
     "/home/mahmoud/.nuget/packages/system.clientmodel/1.0.0/system.clientmodel.1.0.0.nupkg.sha512",
     "/home/mahmoud/.nuget/packages/system.codedom/6.0.0/system.codedom.6.0.0.nupkg.sha512",
     "/home/mahmoud/.nuget/packages/system.collections.immutable/7.0.0/system.collections.immutable.7.0.0.nupkg.sha512",

@@ -21,6 +21,7 @@ erDiagram
     QUESTION ||--o{ CHOICE : has
     
     QUESTION_ANSWER ||--o{ ANSWER_VIOLATION : has
+    VIOLATION_EVENT ||--o{ ANSWER_VIOLATION : has
     
     USER {
         int user_id PK
@@ -33,6 +34,8 @@ erDiagram
         datetime last_login
         datetime created_at
         datetime updated_at
+        datetime deleted_at "NULL means active"
+        int deleted_by FK "User who deleted"
     }
     
     EXAM {
@@ -53,6 +56,8 @@ erDiagram
         datetime created_at
         datetime updated_at
         boolean is_published
+        datetime deleted_at "NULL means active"
+        int deleted_by FK "Instructor who deleted"
     }
     
     QUESTION {
@@ -65,6 +70,7 @@ erDiagram
         int order_number
         boolean is_required
         datetime created_at
+        datetime deleted_at "NULL means active"
     }
     
     CHOICE {
@@ -95,6 +101,8 @@ erDiagram
         boolean is_graded
         datetime graded_at
         int graded_by FK
+        datetime deleted_at "CRITICAL: preserve evidence"
+        int deleted_by FK
     }
     
     QUESTION_ANSWER {
@@ -111,6 +119,7 @@ erDiagram
         int violation_count
         text instructor_feedback
         boolean is_manually_graded
+        datetime deleted_at "For grade disputes"
     }
     
     VIOLATION_EVENT {
@@ -123,6 +132,7 @@ erDiagram
         text screenshot_url
         int duration_seconds
         text metadata
+        datetime deleted_at "NEVER delete violations"
     }
     
     ANSWER_VIOLATION {
@@ -140,6 +150,7 @@ erDiagram
         text message
         datetime created_at
         text metadata
+        datetime deleted_at
     }
     
     USER_NOTIFICATION {
