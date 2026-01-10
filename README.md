@@ -152,7 +152,7 @@ dotnet test
 
 ## Security Notes
 
-🔒 **Important Security Practices:**
+ **Important Security Practices:**
 
 1. **Never commit `.env` files** - They contain sensitive credentials
 2. **Use strong JWT secrets** - Minimum 32 characters, random
