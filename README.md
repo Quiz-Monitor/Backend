@@ -166,7 +166,3 @@ dotnet test
 2. Make your changes
 3. Write/update tests
 4. Submit a pull request
-
-## License
-
-[Your License Here]
