@@ -9,29 +9,30 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuizMonitor.BLL.DTOs;
+using QuizMonitor.BLL.Interfaces;
 using QuizMonitor.DAL.Data;
+using QuizMonitor.DAL.Interfaces;
 using QuizMonitor.DAL.Models;
 using Microsoft.Extensions.Configuration;
 
 namespace QuizMonitor.BLL.Services
 {
-    public class AuthService
+    public class AuthService : IAuthService
     {
-        private readonly QuizMonitorDbContext _context;
+        private readonly IUnitOfWork _unitOfWork;
         private readonly IConfiguration _configuration;
 
-        public AuthService(QuizMonitorDbContext context, IConfiguration configuration)
+        public AuthService(IUnitOfWork unitOfWork, IConfiguration configuration)
         {
-            _context = context;
+            _unitOfWork = unitOfWork;
             _configuration = configuration;
         }
 
         public async Task<AuthResponseDTO> RegisterAsync(RegisterDTO dto)
         {
             // check if the user is already exist
-            var existingUser = await _context.Users
-                .Where(u => u.Email == dto.Email && u.DeletedAt == null)
-                .FirstOrDefaultAsync();
+            var existingUser = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.DeletedAt == null);
             
             if (existingUser != null)
             {
@@ -39,24 +40,22 @@ namespace QuizMonitor.BLL.Services
             }
 
             // hash password
-
             var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
             // create new user
-
             var user = new User
             {
                 Email = dto.Email,
                 PasswordHash = passwordHash,
                 FullName = dto.FullName,
-                Role = dto.Role,
+                Role = dto.Role.ToLower(),
                 PhoneNumber = dto.PhoneNumber,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+            await _unitOfWork.Users.AddAsync(user);
+            await _unitOfWork.SaveChangesAsync();
 
             // Generate tokens
             return await GenerateTokensAsync(user);
@@ -65,9 +64,8 @@ namespace QuizMonitor.BLL.Services
         public async Task<AuthResponseDTO> LoginAsync(LoginDTO dto)
         {
             // Find user by email (excluding soft-deleted users)
-            var user = await _context.Users
-                .Where(u => u.Email == dto.Email && u.DeletedAt == null)
-                .FirstOrDefaultAsync();
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.DeletedAt == null);
 
             if (user == null)
             {
@@ -83,7 +81,8 @@ namespace QuizMonitor.BLL.Services
             // Update last login
             user.LastLogin = DateTime.UtcNow;
             user.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
 
             // Generate tokens
             return await GenerateTokensAsync(user);
@@ -92,9 +91,8 @@ namespace QuizMonitor.BLL.Services
         public async Task<AuthResponseDTO> RefreshTokenAsync(string refreshToken)
         {
             // Find user by refresh token (excluding soft-deleted users)
-            var user = await _context.Users
-                .Where(u => u.RefreshToken == refreshToken && u.DeletedAt == null)
-                .FirstOrDefaultAsync();
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken && u.DeletedAt == null);
 
             if (user == null || user.RefreshTokenExpiry == null || user.RefreshTokenExpiry < DateTime.UtcNow)
             {
@@ -107,9 +105,8 @@ namespace QuizMonitor.BLL.Services
 
         public async Task<User?> GetUserByIdAsync(int userId)
         {
-            return await _context.Users
-                .Where(u => u.UserId == userId && u.DeletedAt == null)
-                .FirstOrDefaultAsync();
+            return await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.DeletedAt == null);
         }
 
         private async Task<AuthResponseDTO> GenerateTokensAsync(User user)
@@ -164,7 +161,8 @@ namespace QuizMonitor.BLL.Services
             user.RefreshToken = refreshToken;
             user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(refreshTokenExpirationDays);
             user.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
 
             // Return response
 

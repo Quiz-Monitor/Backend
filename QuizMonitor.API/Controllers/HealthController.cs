@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QuizMonitor.DAL.Data;
+using QuizMonitor.DAL.Interfaces;
 
 namespace QuizMonitor.API.Controllers;
 
@@ -9,11 +10,13 @@ namespace QuizMonitor.API.Controllers;
 public class HealthController : ControllerBase
 {
     private readonly QuizMonitorDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<HealthController> _logger;
 
-    public HealthController(QuizMonitorDbContext context, ILogger<HealthController> logger)
+    public HealthController(QuizMonitorDbContext context, IUnitOfWork unitOfWork, ILogger<HealthController> logger)
     {
         _context = context;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
@@ -53,8 +56,8 @@ public class HealthController : ControllerBase
             }
 
             // Get database statistics
-            var userCount = await _context.Users.CountAsync();
-            var examCount = await _context.Exams.CountAsync();
+            var userCount = await _unitOfWork.Users.CountAsync();
+            var examCount = await _unitOfWork.Exams.CountAsync();
 
             return Ok(new
             {

@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using QuizMonitor.DAL.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuizMonitor.BLL.Services;
+using QuizMonitor.BLL.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using QuizMonitor.DAL.Interfaces;
@@ -73,8 +73,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-// Register AuthService in DI container
-builder.Services.AddScoped<AuthService>();
+// Register Services
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 // Add services to the container.
 builder.Services.AddControllers();

@@ -1,0 +1,144 @@
+### QuizMonitor API - Authentication & Users Test Requests
+@baseUrl = https://localhost:7158
+@token = {{login.response.body.token}}
+
+### Health Check
+GET {{baseUrl}}/api/health
+Accept: application/json
+
+### Database Health Check
+GET {{baseUrl}}/api/health/db
+Accept: application/json
+
+###
+### ========== AUTHENTICATION ==========
+###
+
+### Register - Student
+# @name register
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "student1@example.com",
+  "password": "P@ssw0rd123",
+  "fullName": "Ahmed Hassan",
+  "role": "Student",
+  "phoneNumber": "01012345678"
+}
+
+### Register - Instructor
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "instructor1@example.com",
+  "password": "P@ssw0rd123",
+  "fullName": "Dr. Mohamed Ali",
+  "role": "Instructor",
+  "phoneNumber": "01198765432"
+}
+
+
+### Register - Instructor
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "noha@example.com",
+  "password": "P@ssw0rd123",
+  "fullName": "Dr. noha yehia",
+  "role": "Instructor",
+  "phoneNumber": "01198765438"
+}
+
+### Login
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "noha@example.com",
+  "password": "P@ssw0rd123"
+}
+
+### Refresh Token
+# @name refresh
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.refreshToken}}"
+}
+
+###
+### ========== USERS ==========
+###
+
+### Get Current User Profile
+GET {{baseUrl}}/api/users/me
+Accept: application/json
+Authorization: Bearer {{token}}
+
+###
+### ========== ERROR CASES ==========
+###
+
+### Register - Invalid Role
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "P@ssw0rd123",
+  "fullName": "Test User",
+  "role": "invalid_role",
+  "phoneNumber": "01012345678"
+}
+
+### Register - Duplicate Email
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "student1@example.com",
+  "password": "P@ssw0rd123",
+  "fullName": "Duplicate User",
+  "role": "student",
+  "phoneNumber": "01012345678"
+}
+
+### Login - Wrong Password
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "student1@example.com",
+  "password": "WrongPassword"
+}
+
+### Login - Non-existent User
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "nonexistent@example.com",
+  "password": "P@ssw0rd123"
+}
+
+### Get Profile - No Token (Should return 401)
+GET {{baseUrl}}/api/users/me
+Accept: application/json
+
+### Get Profile - Invalid Token (Should return 401)
+GET {{baseUrl}}/api/users/me
+Accept: application/json
+Authorization: Bearer invalid_token_here
+
+### Refresh Token - Invalid Token
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "invalid_refresh_token"
+}
