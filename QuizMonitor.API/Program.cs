@@ -6,6 +6,8 @@ using Microsoft.IdentityModel.Tokens;
 using QuizMonitor.BLL.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
+using QuizMonitor.DAL.Interfaces;
+using QuizMonitor.DAL.Repositories;
 
 // Enable legacy timestamp behavior for PostgreSQL
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -66,6 +68,10 @@ builder.Services.AddAuthentication(op =>
 
 // Add Authorization Service
 builder.Services.AddAuthorization();
+
+// Register Unit of Work and Generic Repository
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Register AuthService in DI container
 builder.Services.AddScoped<AuthService>();
