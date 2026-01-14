@@ -1,0 +1,206 @@
+### QuizMonitor API - Exam Management Test Requests
+@baseUrl = https://localhost:7158
+@instructorToken = {{loginInstructor.response.body.token}}
+
+###
+### ========== SETUP: Login as Instructor ==========
+###
+
+### Register Instructor
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "mohamed@example.com",
+  "password": "P@ssw0rd123",
+  "fullName": "Dr. mohamed Hassan",
+  "role": "Instructor",
+  "phoneNumber": "01198765432"
+}
+
+### Login as Instructor
+# @name loginInstructor
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "mohamed@example.com",
+  "password": "P@ssw0rd123"
+}
+
+###
+### ========== EXAM MANAGEMENT ==========
+###
+
+### 1. Create Exam
+# @name createExam
+POST {{baseUrl}}/api/exams
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "title": "Data Structures Quiz",
+  "description": "Midterm quiz",
+  "durationMinutes": 60,
+  "startTime": "2026-02-01T10:00:00Z",
+  "endTime": "2026-02-01T11:00:00Z",
+  "cameraRequired": true,
+  "tabSwitchingDetection": true,
+  "eyeTrackingEnabled": true,
+  "multiplePersonDetection": true,
+  "maxTabSwitches": 3,
+  "maxEyeAwaySeconds": 15
+}
+
+###
+### ========== QUESTION MANAGEMENT ==========
+###
+
+### 2. Add Question (MCQ Single Choice)
+# @name addQuestion1
+POST {{baseUrl}}/api/exams/1/questions
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "mcq_single",
+  "questionText": "What is the time complexity of binary search?",
+  "points": 5,
+  "orderNumber": 1,
+  "isRequired": true,
+  "choices": [
+    { "text": "O(n)", "isCorrect": false, "orderNumber": 1 },
+    { "text": "O(log n)", "isCorrect": true, "orderNumber": 2 },
+    { "text": "O(n log n)", "isCorrect": false, "orderNumber": 3 }
+  ]
+}
+
+### 3. Add Question (MCQ Multiple Choice)
+POST {{baseUrl}}/api/exams/2/questions
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "mcq_multiple",
+  "questionText": "Which of the following are linear data structures?",
+  "points": 10,
+  "orderNumber": 2,
+  "isRequired": true,
+  "choices": [
+    { "text": "Array", "isCorrect": true, "orderNumber": 1 },
+    { "text": "Linked List", "isCorrect": true, "orderNumber": 2 },
+    { "text": "Tree", "isCorrect": false, "orderNumber": 3 },
+    { "text": "Stack", "isCorrect": true, "orderNumber": 4 }
+  ]
+}
+
+### 4. Add Question (True/False)
+POST {{baseUrl}}/api/exams/1/questions
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "true_false",
+  "questionText": "A queue follows LIFO principle.",
+  "points": 3,
+  "orderNumber": 3,
+  "isRequired": true,
+  "choices": [
+    { "text": "True", "isCorrect": false, "orderNumber": 1 },
+    { "text": "False", "isCorrect": true, "orderNumber": 2 }
+  ]
+}
+
+### 5. Add Question (Short Answer)
+POST {{baseUrl}}/api/exams/1/questions
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "short_answer",
+  "questionText": "Define what a hash table is.",
+  "points": 5,
+  "orderNumber": 4,
+  "isRequired": true
+}
+
+### 6. Update Question
+PUT {{baseUrl}}/api/exams/1/questions/2
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "mcq_single",
+  "questionText": "What is the average time complexity of binary search?",
+  "points": 10,
+  "orderNumber": 1,
+  "isRequired": true,
+  "choices": [
+    { "choiceId": 1, "text": "O(n)", "isCorrect": false, "orderNumber": 1 },
+    { "choiceId": 2, "text": "O(log n)", "isCorrect": true, "orderNumber": 2 },
+    { "choiceId": 3, "text": "O(n log n)", "isCorrect": false, "orderNumber": 3 },
+    { "text": "O(1)", "isCorrect": false, "orderNumber": 4 }
+  ]
+}
+
+### 7. Publish Exam
+POST {{baseUrl}}/api/exams/1/publish
+Authorization: Bearer {{instructorToken}}
+
+### 8. Delete Question
+DELETE {{baseUrl}}/api/exams/1/questions/2
+Authorization: Bearer {{instructorToken}}
+
+###
+### ========== ERROR CASES ==========
+###
+
+### Try to create exam without authentication (401)
+POST {{baseUrl}}/api/exams
+Content-Type: application/json
+
+{
+  "title": "Test Exam",
+  "durationMinutes": 60
+}
+
+### Try to add question to non-existent exam (404)
+POST {{baseUrl}}/api/exams/999/questions
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "MCQ_SINGLE",
+  "questionText": "Test question?",
+  "points": 5,
+  "orderNumber": 1
+}
+
+### Try to add question with invalid type (400)
+POST {{baseUrl}}/api/exams/1/questions
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "INVALID_TYPE",
+  "questionText": "Test question?",
+  "points": 5,
+  "orderNumber": 1
+}
+
+### Try to update question in published exam (400)
+# Note: Run this after publishing the exam
+PUT {{baseUrl}}/api/exams/1/questions/1
+Content-Type: application/json
+Authorization: Bearer {{instructorToken}}
+
+{
+  "questionType": "MCQ_SINGLE",
+  "questionText": "Updated question after publish",
+  "points": 5,
+  "orderNumber": 1
+}
+
+### Try to publish already published exam (400)
+POST {{baseUrl}}/api/exams/1/publish
+Authorization: Bearer {{instructorToken}}

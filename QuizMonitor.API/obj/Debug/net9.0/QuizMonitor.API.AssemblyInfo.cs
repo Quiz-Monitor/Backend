@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("QuizMonitor.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e06f5e4a5c564a4151f21b6c298c41faf837fd51")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fc34c2b2c73892c7ce64012f9411a275c8edc69e")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuizMonitor.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuizMonitor.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
