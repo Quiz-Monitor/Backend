@@ -29,6 +29,10 @@ public partial class User
 
     public int? DeletedBy { get; set; }
 
+    public string? RefreshToken { get; set; }
+
+    public DateTime? RefreshTokenExpiry { get; set; }
+
     public virtual User? DeletedByNavigation { get; set; }
 
     public virtual ICollection<ExamAttempt> ExamAttemptDeletedByNavigations { get; set; } = new List<ExamAttempt>();

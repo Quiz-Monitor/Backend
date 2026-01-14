@@ -7,6 +7,10 @@ namespace QuizMonitor.DAL.Data;
 
 public partial class QuizMonitorDbContext : DbContext
 {
+    public QuizMonitorDbContext()
+    {
+    }
+
     public QuizMonitorDbContext(DbContextOptions<QuizMonitorDbContext> options)
         : base(options)
     {
@@ -449,6 +453,12 @@ public partial class QuizMonitorDbContext : DbContext
                 .HasMaxLength(20)
                 .HasColumnName("phone_number");
             entity.Property(e => e.ProfilePicture).HasColumnName("profile_picture");
+            entity.Property(e => e.RefreshToken)
+                .HasMaxLength(500)
+                .HasColumnName("refresh_token");
+            entity.Property(e => e.RefreshTokenExpiry)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("refresh_token_expiry");
             entity.Property(e => e.Role)
                 .HasMaxLength(50)
                 .HasColumnName("role");
@@ -545,7 +555,6 @@ public partial class QuizMonitorDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("violation_event_question_id_fkey");
         });
-        modelBuilder.HasSequence<int>("seq_schema_version", "graphql").IsCyclic();
 
         OnModelCreatingPartial(modelBuilder);
     }

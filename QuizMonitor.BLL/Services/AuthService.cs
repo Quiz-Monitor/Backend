@@ -104,5 +104,83 @@ namespace QuizMonitor.BLL.Services
             // Generate new tokens
             return await GenerateTokensAsync(user);
         }
+
+        public async Task<User?> GetUserByIdAsync(int userId)
+        {
+            return await _context.Users
+                .Where(u => u.UserId == userId && u.DeletedAt == null)
+                .FirstOrDefaultAsync();
+        }
+
+        private async Task<AuthResponseDTO> GenerateTokensAsync(User user)
+        {
+            // Read JWT settings from configuration
+
+            var secretKey = _configuration["JwtSettings:SecretKey"];
+            var issuer = _configuration["JwtSettings:Issuer"];
+            var audience = _configuration["JwtSettings:Audience"];
+            var expirationMinutes = int.Parse(_configuration["JwtSettings:ExpirationMinutes"] ?? "30");
+            var refreshTokenExpirationDays = int.Parse(_configuration["JwtSettings:RefreshTokenExpirationDays"] ?? "7");
+
+            if (string.IsNullOrEmpty(secretKey) || secretKey.Length < 32)
+            {
+                throw new InvalidOperationException("JWT SecretKey must be at least 32 characters");
+            }
+
+            // VCreate JWT claims
+
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Name, user.FullName),
+                new Claim(ClaimTypes.Role, user.Role)   
+            };
+            // Create signing credentials
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            // Set expiration At
+            var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
+            // Create JWT token
+            var token = new JwtSecurityToken
+            (
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: expiresAt,
+                signingCredentials: credentials
+            );
+
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+            // Generate refresh token using cryptographically secure random bytes
+            var refreshTokenBytes = new byte[64];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(refreshTokenBytes);
+            }
+            var refreshToken = Convert.ToBase64String(refreshTokenBytes);
+            // Save refresh token to database
+            user.RefreshToken = refreshToken;
+            user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(refreshTokenExpirationDays);
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            // Return response
+
+            return new AuthResponseDTO
+            {
+                Token = tokenString,
+                RefreshToken = refreshToken,
+                ExpiresAt = expiresAt,
+                User = new UserInfoDTO
+                {
+                    UserId = user.UserId,
+                    Email = user.Email,
+                    FullName = user.FullName,
+                    Role = user.Role
+                }
+            };
+        }
     }
 }
