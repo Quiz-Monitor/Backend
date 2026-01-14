@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("QuizMonitor.DAL")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ceeb512e6451c3e9281cbbd71b9ea6b7b1df4300")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+42b38dbef32bfdaf0affc432043c45b9e2cc7693")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuizMonitor.DAL")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuizMonitor.DAL")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

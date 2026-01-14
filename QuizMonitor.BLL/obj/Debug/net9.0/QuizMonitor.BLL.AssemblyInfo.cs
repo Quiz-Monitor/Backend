@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("QuizMonitor.BLL")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8dc0ddc017a435a84b84f4fdc23cce98dc705cbd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+42b38dbef32bfdaf0affc432043c45b9e2cc7693")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuizMonitor.BLL")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuizMonitor.BLL")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
