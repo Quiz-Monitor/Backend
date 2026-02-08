@@ -216,11 +216,13 @@
 
 #  Exam Participation (Student) (~6)
 
-##  Join Exam by Code
+## Join Exam by Code
 
-`POST /api/exams/join`
+**(Creates WAITING attempt, no timer yet)**
 
-**Request**
+### `POST /api/exams/join`
+
+### Request
 
 ```json
 {
@@ -228,12 +230,23 @@
 }
 ```
 
-**Response**
+### Server-side rules
+
+* exam exists
+* `IsPublished = true`
+* student not already joined
+* current time ≤ exam.end_time
+
+---
+
+### Response
 
 ```json
 {
   "examId": 5,
   "title": "Data Structures Quiz",
+  "status": "WAITING",
+  "startTime": "2025-02-01T10:00:00Z",
   "rules": [
     "Do not switch tabs",
     "Camera access is required"
@@ -241,13 +254,21 @@
 }
 ```
 
+Notes
+
+* **No `attemptId` yet**
+* Attempt row **is created** with `status = WAITING`
+* Student is now *eligible* to be notified
+
 ---
 
-##  Start Exam Attempt
+## Start Exam Attempt
 
-`POST /api/exam-attempts/start`
+**(Transitions WAITING → ACTIVE)**
 
-**Request**
+### `POST /api/exam-attempts/start`
+
+### Request
 
 ```json
 {
@@ -255,7 +276,16 @@
 }
 ```
 
-**Response**
+### Server-side rules
+
+* student has WAITING attempt
+* now ≥ exam.start_time
+* now ≤ exam.end_time
+* attempt belongs to student
+
+---
+
+### Response
 
 ```json
 {
@@ -282,37 +312,60 @@
 }
 ```
 
+Notes
+
+* Timer starts **now**
+* Attempt `status = ACTIVE`
+* First question returned to reduce extra call
+
 ---
 
-##  Get Next Question
+## Get Question by Order
 
-`GET /api/exam-attempts/{attemptId}/questions/{orderNumber}`
+**(Sequential navigation, no preloading)**
 
-**Response**
+### `GET /api/exam-attempts/{attemptId}/questions/{orderNumber}`
+
+### Server-side rules
+
+* attempt exists
+* attempt belongs to student
+* `status = ACTIVE`
+* orderNumber valid
+
+---
+
+### Response
 
 ```json
 {
-  "questionId": 20,
+  "questionId": 21,
   "questionType": "MCQ_SINGLE",
-  "questionText": "What is the time complexity of binary search?",
+  "questionText": "Which data structure uses FIFO?",
+  "points": 5,
+  "orderNumber": 2,
   "choices": [
-    { "choiceId": 1, "text": "O(n)" },
-    { "choiceId": 2, "text": "O(log n)" },
-    { "choiceId": 3, "text": "O(n log n)" }
+    { "choiceId": 4, "text": "Stack" },
+    { "choiceId": 5, "text": "Queue" },
+    { "choiceId": 6, "text": "Tree" }
   ]
 }
 ```
 
+Notes
+
+* No correct answers exposed
+* Order-based prevents question ID guessing
+
 ---
 
-##  Save Answer (AUTO-SAVE)
+## Save Answer (Auto-Save)
 
-`POST /api/exam-attempts/{attemptId}/answers`
+**(Insert or update, called on every “Next”)**
 
->  **This endpoint is called on every “Next” click**
->  Matches your cheating-detection & timing requirements
+### `POST /api/exam-attempts/{attemptId}/answers`
 
-**Request**
+### Request
 
 ```json
 {
@@ -324,7 +377,16 @@
 }
 ```
 
-**Response**
+### Server-side rules
+
+* attempt ACTIVE
+* question belongs to exam
+* if answer exists → update
+* else → insert
+
+---
+
+### Response
 
 ```json
 {
@@ -334,13 +396,21 @@
 }
 ```
 
+Notes
+
+* Supports crash recovery
+* Supports timing analytics
+* Perfect for cheating correlation
+
 ---
 
-##  Log Cheating Event
+## Log Cheating / Violation Event
 
-`POST /api/exam-attempts/{attemptId}/violations`
+**(Append-only, no updates or deletes)**
 
-**Request**
+### `POST /api/exam-attempts/{attemptId}/violations`
+
+### Request
 
 ```json
 {
@@ -355,7 +425,15 @@
 }
 ```
 
-**Response**
+### Server-side rules
+
+* attempt ACTIVE
+* violations are immutable
+* auto-increment counters
+
+---
+
+### Response
 
 ```json
 {
@@ -364,23 +442,55 @@
 }
 ```
 
+Notes
+
+* Evidence-grade logging
+* Works with instructor review
+* Matches your ERD perfectly
+
 ---
 
-##  Submit Exam
+## Submit Exam
 
-`POST /api/exam-attempts/{attemptId}/submit`
+**(Locks attempt, computes result)**
 
-**Response**
+### `POST /api/exam-attempts/{attemptId}/submit`
+
+### Server-side rules
+
+* attempt ACTIVE
+* auto-submit if time expired
+* client timestamps ignored
+* scores computed server-side
+
+---
+
+### Response
 
 ```json
 {
-  "status": "Submitted",
+  "status": "SUBMITTED",
   "mcqScore": 25,
+  "manualScore": null,
+  "finalScore": 25,
   "totalViolations": 2,
-  "cheatingStatus": "Warning"
+  "cheatingStatus": "WARNING"
 }
 ```
 
+Notes
+
+* Attempt becomes immutable
+* Instructor grading happens later
+* Evidence preserved
+
+---
+
+# Final Attempt Lifecycle (Important)
+
+```
+WAITING → ACTIVE → SUBMITTED → GRADED
+```
 ---
 
 # 3- Grading & Results (Instructor) (~5)
