@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using QuizMonitor.BLL.DTOs;
 using QuizMonitor.BLL.Interfaces;
@@ -209,7 +210,100 @@ namespace QuizMonitor.BLL.Services
             return await MapToQuestionResponseDto(question);
         }
 
-        
+        public async Task<SaveAnswerResponseDto> SaveAnswerAsync(int attemptId, int studentId, SaveAnswerDto dto)
+        {
+            // validate attempt
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            if (attempt == null || attempt.DeletedAt != null) throw new InvalidOperationException("Exam attempt not found");
+            if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
+            if (attempt.Status != "ACTIVE") throw new InvalidOperationException("Exam attempt is not active");
+
+            // validate question belongs to the exam
+
+            var question = await _unitOfWork.Questions.GetByIdAsync(dto.QuestionId);
+            if (question == null || question.DeletedAt != null || question.ExamId != attempt.ExamId)
+            {
+                throw new InvalidOperationException("Question not found or does not belong to this exam");
+            }
+
+            // check if the answer already exist
+
+            var existingAnswer = await _unitOfWork.QuestionAnswers.FirstOrDefaultAsync(qa => qa.AttemptId == attemptId
+                && qa.QuestionId == dto.QuestionId && qa.DeletedAt == null);
+
+            // calc the score for MCQs
+
+            decimal score = 0;
+            bool isCorrect = false;
+
+            if (question.QuestionType.StartsWith("MCQ"))
+            {
+                // gather all choices that related to that question
+                var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
+                // gather the IDs of corrected choices
+                var correctChoices = choices.Where(c => c.IsCorrect == true).Select(c => c.ChoiceId).ToList();
+                // compare between selected choices that the student has selected and corrected choices
+                var selectedChoicesSet = dto.SelectedChoices.OrderBy(x => x).ToList();
+                var correctChoicesSet = correctChoices.OrderBy(x => x).ToList();
+
+                isCorrect = selectedChoicesSet.SequenceEqual(correctChoicesSet);
+
+                if (isCorrect) score = question.Points;
+                else score = 0;
+            }
+
+            var selectedChoicesJson = JsonSerializer.Serialize(dto.SelectedChoices);
+            if (existingAnswer != null)
+            {
+                // Update existing answer
+                existingAnswer.SelectedChoices = selectedChoicesJson;
+                existingAnswer.Score = question.QuestionType.StartsWith("MCQ") ? score : null;
+                existingAnswer.IsCorrect = question.QuestionType.StartsWith("MCQ") ? isCorrect : null;
+                existingAnswer.StartedAt = dto.StartedAt;
+                existingAnswer.AnsweredAt = dto.AnsweredAt;
+                existingAnswer.TimeSpentSeconds = dto.TimeSpentSeconds;
+
+                _unitOfWork.QuestionAnswers.Update(existingAnswer);
+                await _unitOfWork.SaveChangesAsync();
+
+                return new SaveAnswerResponseDto
+                {
+                    AnswerId = existingAnswer.AnswerId,
+                    IsCorrect = isCorrect,
+                    Score = score
+                };
+            }
+            else
+            {
+                // Insert new answer
+                var newAnswer = new QuestionAnswer
+                {
+                    AttemptId = attemptId,
+                    QuestionId = dto.QuestionId,
+                    SelectedChoices = selectedChoicesJson,
+                    Score = question.QuestionType.StartsWith("MCQ") ? score : null,
+                    IsCorrect = question.QuestionType.StartsWith("MCQ") ? isCorrect : null,
+                    StartedAt = dto.StartedAt,
+                    AnsweredAt = dto.AnsweredAt,
+                    TimeSpentSeconds = dto.TimeSpentSeconds,
+                    ViolationCount = 0,
+                    IsManuallyGraded = false
+                };
+
+                await _unitOfWork.QuestionAnswers.AddAsync(newAnswer);
+                await _unitOfWork.SaveChangesAsync();
+
+                return new SaveAnswerResponseDto
+                {
+                    AnswerId = newAnswer.AnswerId,
+                    IsCorrect = isCorrect,
+                    Score = score
+                };
+            }
+
+
+
+        }
 
         private async Task<QuestionResponseDto> MapToQuestionResponseDto(Question question)
         {
@@ -234,6 +328,6 @@ namespace QuizMonitor.BLL.Services
                         OrderNumber = c.OrderNumber  
                     }).ToList()
             };
-        }        
+        }
     }
 }
