@@ -92,6 +92,74 @@ namespace QuizMonitor.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Get question by order number
+        /// </summary>
+        [HttpGet("exam-attempts/{attemptId}/questions/{orderNumber}")]
+        [Authorize(Roles = "student")]
+        public async Task<IActionResult> GetQuestion(int attemptId, int orderNumber)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                {
+                    return Unauthorized(new { message = "Invalid user token" });
+                }
 
+                var result = await _examAttemptService.GetQuestionByOrderAsync(attemptId, studentId, orderNumber);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to get question: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized access to question: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting question");
+                return StatusCode(500, new { message = "An error occurred while retrieving the question" });
+            }
+        }
+
+        /// <summary>
+        /// Save answer (auto-save)
+        /// </summary>
+        [HttpPost("exam-attempts/{attemptId}/answers")]
+        [Authorize(Roles = "student")]
+        public async Task<IActionResult> SaveAnswer(int attemptId, [FromBody] SaveAnswerDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                {
+                    return Unauthorized(new { message = "Invalid user token" });
+                }
+
+                var result = await _examAttemptService.SaveAnswerAsync(attemptId, studentId, dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to save answer: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized save answer: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving answer");
+                return StatusCode(500, new { message = "An error occurred while saving the answer" });
+            }
+        }
     }
 }
