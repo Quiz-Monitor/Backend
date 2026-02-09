@@ -10,6 +10,7 @@ namespace QuizMonitor.BLL.Interfaces
     {
         Task<JoinExamResponseDto> JoinExamAsync(int studentId, JoinExamDto dto);
         Task<StartExamResponseDto> StartExamAsync(int studentId, StartExamDto dto);
+        Task<QuestionResponseDto> GetQuestionByOrderAsync(int attemptId, int studentId, int orderNumber);
         
     }
 }

@@ -20,6 +20,8 @@ namespace QuizMonitor.BLL.Services
             _unitOfWork = unitOfWork;
         }
 
+        
+
         public async Task<JoinExamResponseDto> JoinExamAsync(int studentId, JoinExamDto dto)
         {
             // Find exam by code
@@ -184,10 +186,34 @@ namespace QuizMonitor.BLL.Services
         }
 
 
+
+        public async Task<QuestionResponseDto> GetQuestionByOrderAsync(int attemptId, int studentId, int orderNumber)
+        {
+            // validate if the attmept belongs to the student
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            
+            if (attempt == null || attempt.DeletedAt != null) throw new InvalidOperationException("Exam attempt not found");
+
+            if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to the student");
+
+            if (attempt.Status != "ACTIVE") throw new InvalidOperationException("Exam attempt is not active");
+
+            var question = await _unitOfWork.Questions.FirstOrDefaultAsync(q => q.ExamId == attempt.ExamId
+                && q.OrderNumber == orderNumber && q.DeletedAt == null);
+            
+            if (question == null)
+            {
+                throw new InvalidOperationException("Question not found");
+            }
+
+            return await MapToQuestionResponseDto(question);
+        }
+
+        
+
         private async Task<QuestionResponseDto> MapToQuestionResponseDto(Question question)
         {
-            var choices = await _unitOfWork.Choices
-                .FindAsync(c => c.QuestionId == question.QuestionId);
+            var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
 
             return new QuestionResponseDto
             {
@@ -199,15 +225,15 @@ namespace QuizMonitor.BLL.Services
                 OrderNumber = question.OrderNumber,
                 IsRequired = question.IsRequired ?? true,
                 CreatedAt = question.CreatedAt,
-                Choices = choices.OrderBy(c => c.OrderNumber).Select(c => new ChoiceDto
-                {
-                    ChoiceId = c.ChoiceId,
-                    Text = c.ChoiceText,
-                    IsCorrect = false, // Never expose correct answers to students
-                    OrderNumber = c.OrderNumber
-                }).ToList()
+                Choices = choices.OrderBy(c => c.OrderNumber)
+                    .Select(c => new ChoiceDto
+                    {
+                        ChoiceId = c.ChoiceId,
+                        Text = c.ChoiceText,
+                        IsCorrect = false, // Never expose correct answers to students
+                        OrderNumber = c.OrderNumber  
+                    }).ToList()
             };
-        }
-
+        }        
     }
 }
