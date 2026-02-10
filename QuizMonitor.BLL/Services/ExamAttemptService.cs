@@ -305,6 +305,118 @@ namespace QuizMonitor.BLL.Services
 
         }
 
+        public async Task<LogViolationResponseDto> LogViolationAsync(int attemptId, int studentId, LogViolationDto dto)
+        {
+            // validate attempt
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            if (attempt == null || attempt.DeletedAt != null) throw new InvalidOperationException("Exam attempt not found");
+            if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
+            if (attempt.Status != "ACTIVE") throw new InvalidOperationException("Exam attempt is not active");
+
+            // create violation event
+
+            var violation = new ViolationEvent
+            {
+                AttemptId = attemptId,
+                QuestionId = dto.QuestionId,
+                ViolationType = dto.ViolationType,
+                Description = dto.Description,
+                DurationSeconds = dto.DurationSeconds,
+                ScreenshotUrl = dto.ScreenshotUrl,
+                Timestamp = DateTime.UtcNow,
+                Metadata = dto.Metadata != null ? JsonSerializer.Serialize(dto.Metadata) : null
+            };
+
+            await _unitOfWork.ViolationEvents.AddAsync(violation);
+
+            // update attempt violation counters
+
+            attempt.TotalViolations = (attempt.TotalViolations ?? 0) + 1;
+
+            switch (dto.ViolationType.ToUpper())
+            {
+                case "TAB_SWITCH":
+                    attempt.TabSwitchCount = (attempt.TabSwitchCount ?? 0) + 1;
+                    break;
+                case "EYE_AWAY":
+                    attempt.EyeAwayCount = (attempt.EyeAwayCount ?? 0) + 1;
+                    break;
+                case "MULTIPLE_PERSON":
+                    attempt.MultiplePersonCount = (attempt.MultiplePersonCount ?? 0) + 1;
+                    break;
+                case "OBJECT_DETECTED":
+                    attempt.ObjectDetectedCount = (attempt.ObjectDetectedCount ?? 0) + 1;
+                    break;
+            }
+
+            _unitOfWork.ExamAttempts.Update(attempt);
+            await _unitOfWork.SaveChangesAsync();
+
+            return new LogViolationResponseDto
+            {
+                ViolationId = violation.ViolationId,
+                TotalViolations = attempt.TotalViolations ?? 0
+            };
+
+
+        }
+
+        public async Task<SubmitExamResponseDto> SubmitExamAsync(int attemptId, int studentId)
+        {
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            if (attempt == null || attempt.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam attempt not found");
+            }
+
+            if (attempt.StudentId != studentId)
+            {
+                throw new UnauthorizedAccessException("This attempt does not belong to you");
+            }
+
+            if (attempt.Status != "ACTIVE")
+            {
+                throw new InvalidOperationException("Exam attempt is not active");
+            }
+
+            // calc total duration
+            var submitTime = DateTime.UtcNow;
+            var duration = (int)(submitTime - attempt.StartTime).TotalSeconds;
+
+            // calc MCQ score
+
+            var answers = await _unitOfWork.QuestionAnswers.FindAsync(qa => qa.AttemptId == attemptId && qa.DeletedAt == null);
+            var mcqScore = answers.Where(a => a.Score.HasValue).Sum(a => a.Score.Value);
+
+            // update attempt
+            attempt.Status = "SUBMITTED";
+            attempt.SubmitTime = submitTime;
+            attempt.TotalDurationSeconds = duration;
+            attempt.McqScore = mcqScore;
+            attempt.FinalScore = mcqScore; // Will be updated after manual grading
+
+            _unitOfWork.ExamAttempts.Update(attempt);
+            await _unitOfWork.SaveChangesAsync();
+
+            // Determine cheating status
+            var totalViolations = attempt.TotalViolations ?? 0;
+            string cheatingStatus = "FLAGGED";
+
+            if (totalViolations == 0) cheatingStatus = "CLEAN";
+            else if (totalViolations <= 3) cheatingStatus = "WARNING";
+            else cheatingStatus = "FLAGGED";
+
+            return new SubmitExamResponseDto
+            {
+                Status = "SUBMITTED",
+                McqScore = mcqScore,
+                ManualScore = attempt.ManualScore,
+                FinalScore = attempt.FinalScore ?? 0,
+                TotalViolations = totalViolations,
+                CheatingStatus = cheatingStatus
+            };
+        }
+
         private async Task<QuestionResponseDto> MapToQuestionResponseDto(Question question)
         {
             var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
