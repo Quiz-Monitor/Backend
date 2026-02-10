@@ -161,5 +161,76 @@ namespace QuizMonitor.API.Controllers
                 return StatusCode(500, new { message = "An error occurred while saving the answer" });
             }
         }
+
+        /// <summary>
+        /// Log violation event
+        /// </summary>
+        [HttpPost("exam-attempts/{attemptId}/violations")]
+        [Authorize(Roles = "student")]
+        public async Task<IActionResult> LogViolation(int attemptId, [FromBody] LogViolationDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                {
+                    return Unauthorized(new { message = "Invalid user token" });
+                }
+
+                var result = await _examAttemptService.LogViolationAsync(attemptId, studentId, dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to log violation: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized log violation: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error logging violation");
+                return StatusCode(500, new { message = "An error occurred while logging the violation" });
+            }
+        }
+
+        /// <summary>
+        /// Submit exam
+        /// </summary>
+        [HttpPost("exam-attempts/{attemptId}/submit")]
+        [Authorize(Roles = "student")]
+        public async Task<IActionResult> SubmitExam(int attemptId)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                {
+                    return Unauthorized(new { message = "Invalid user token" });
+                }
+
+                var result = await _examAttemptService.SubmitExamAsync(attemptId, studentId);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to submit exam: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized submit exam: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error submitting exam");
+                return StatusCode(500, new { message = "An error occurred while submitting the exam" });
+            }
+        }
+
     }
 }
