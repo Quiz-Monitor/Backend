@@ -39,11 +39,11 @@ Content-Type: application/json
 Authorization: Bearer {{instructorToken}}
 
 {
-  "title": "Data Structures Quiz",
-  "description": "Midterm quiz",
+  "title": "ALgorithms Quiz",
+  "description": "Final quiz",
   "durationMinutes": 60,
-  "startTime": "2026-02-01T10:00:00Z",
-  "endTime": "2026-02-01T11:00:00Z",
+  "startTime": "2026-02-11T10:00:00Z",
+  "endTime": "2026-02-11T11:00:00Z",
   "cameraRequired": true,
   "tabSwitchingDetection": true,
   "eyeTrackingEnabled": true,
@@ -58,7 +58,7 @@ Authorization: Bearer {{instructorToken}}
 
 ### 2. Add Question (MCQ Single Choice)
 # @name addQuestion1
-POST {{baseUrl}}/api/exams/1/questions
+POST {{baseUrl}}/api/exams/3/questions
 Content-Type: application/json
 Authorization: Bearer {{instructorToken}}
 
@@ -76,7 +76,7 @@ Authorization: Bearer {{instructorToken}}
 }
 
 ### 3. Add Question (MCQ Multiple Choice)
-POST {{baseUrl}}/api/exams/2/questions
+POST {{baseUrl}}/api/exams/3/questions
 Content-Type: application/json
 Authorization: Bearer {{instructorToken}}
 
@@ -144,7 +144,7 @@ Authorization: Bearer {{instructorToken}}
 }
 
 ### 7. Publish Exam
-POST {{baseUrl}}/api/exams/1/publish
+POST {{baseUrl}}/api/exams/3/publish
 Authorization: Bearer {{instructorToken}}
 
 ### 8. Delete Question

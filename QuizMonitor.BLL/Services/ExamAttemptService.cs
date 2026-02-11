@@ -58,7 +58,8 @@ namespace QuizMonitor.BLL.Services
             {
                 ExamId = exam.ExamId,
                 StudentId = studentId,
-                Status = "WAITING",
+                Status = "waiting",
+                CheatingStatus = "clean",
                 StartTime = DateTime.UtcNow, // Record when they joined
                 IsGraded = false,
                 TotalViolations = 0,
@@ -108,7 +109,7 @@ namespace QuizMonitor.BLL.Services
                 ExamId = exam.ExamId,
                 InstructorName = instructor.FullName,
                 Title = exam.Title,
-                Status = "WAITING",
+                Status = "waiting",
                 StartTime = exam.StartTime,
                 Rules = rules
             };
@@ -120,7 +121,7 @@ namespace QuizMonitor.BLL.Services
 
             var attempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync
                 (a => a.ExamId == dto.ExamId && a.StudentId == studentId
-                && a.Status == "WAITING" && a.DeletedAt == null);
+                && a.Status == "waiting" && a.DeletedAt == null);
 
             if (attempt == null)
             {
@@ -150,7 +151,7 @@ namespace QuizMonitor.BLL.Services
             }
 
             // Transition to ACTIVE
-            attempt.Status = "ACTIVE";
+            attempt.Status = "in_progress";
             attempt.StartTime = now; // Update to actual start time
             _unitOfWork.ExamAttempts.Update(attempt);
             await _unitOfWork.SaveChangesAsync();
@@ -197,7 +198,7 @@ namespace QuizMonitor.BLL.Services
 
             if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to the student");
 
-            if (attempt.Status != "ACTIVE") throw new InvalidOperationException("Exam attempt is not active");
+            if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
             var question = await _unitOfWork.Questions.FirstOrDefaultAsync(q => q.ExamId == attempt.ExamId
                 && q.OrderNumber == orderNumber && q.DeletedAt == null);
@@ -216,7 +217,7 @@ namespace QuizMonitor.BLL.Services
             var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
             if (attempt == null || attempt.DeletedAt != null) throw new InvalidOperationException("Exam attempt not found");
             if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
-            if (attempt.Status != "ACTIVE") throw new InvalidOperationException("Exam attempt is not active");
+            if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
             // validate question belongs to the exam
 
@@ -311,7 +312,7 @@ namespace QuizMonitor.BLL.Services
             var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
             if (attempt == null || attempt.DeletedAt != null) throw new InvalidOperationException("Exam attempt not found");
             if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
-            if (attempt.Status != "ACTIVE") throw new InvalidOperationException("Exam attempt is not active");
+            if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
             // create violation event
 
@@ -374,7 +375,7 @@ namespace QuizMonitor.BLL.Services
                 throw new UnauthorizedAccessException("This attempt does not belong to you");
             }
 
-            if (attempt.Status != "ACTIVE")
+            if (attempt.Status != "in_progress")
             {
                 throw new InvalidOperationException("Exam attempt is not active");
             }
@@ -389,7 +390,7 @@ namespace QuizMonitor.BLL.Services
             var mcqScore = answers.Where(a => a.Score.HasValue).Sum(a => a.Score.Value);
 
             // update attempt
-            attempt.Status = "SUBMITTED";
+            attempt.Status = "submitted";
             attempt.SubmitTime = submitTime;
             attempt.TotalDurationSeconds = duration;
             attempt.McqScore = mcqScore;
@@ -400,15 +401,15 @@ namespace QuizMonitor.BLL.Services
 
             // Determine cheating status
             var totalViolations = attempt.TotalViolations ?? 0;
-            string cheatingStatus = "FLAGGED";
+            string cheatingStatus = "flagged";
 
-            if (totalViolations == 0) cheatingStatus = "CLEAN";
-            else if (totalViolations <= 3) cheatingStatus = "WARNING";
-            else cheatingStatus = "FLAGGED";
+            if (totalViolations == 0) cheatingStatus = "clean";
+            else if (totalViolations <= 3) cheatingStatus = "warning";
+            else cheatingStatus = "flagged";
 
             return new SubmitExamResponseDto
             {
-                Status = "SUBMITTED",
+                Status = "submitted",
                 McqScore = mcqScore,
                 ManualScore = attempt.ManualScore,
                 FinalScore = attempt.FinalScore ?? 0,
