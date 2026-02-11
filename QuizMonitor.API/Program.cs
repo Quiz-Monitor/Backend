@@ -21,7 +21,7 @@ if (File.Exists(envPath))
 }
 else
 {
-    Console.WriteLine($"Warning: .env file not found at {envPath}");
+    Console.WriteLine($".env file not found at: {envPath}");
 }
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,54 +34,70 @@ Console.WriteLine($"Connection string loaded: {!string.IsNullOrEmpty(connectionS
 builder.Services.AddDbContext<QuizMonitorDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-//  Validate JWT Secret Key (at startup)
+// Register repositories and Unit of Work
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-var secretKey = Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
-if (string.IsNullOrEmpty(secretKey) || secretKey.Length < 32)
+// Register services
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IExamService, ExamService>();
+builder.Services.AddScoped<IExamAttemptService, ExamAttemptService>();
+
+// Add controllers
+builder.Services.AddControllers();
+
+// Configure JWT Authentication
+var jwtSecretKey = Environment.GetEnvironmentVariable("JwtSettings__SecretKey");
+var jwtIssuer = Environment.GetEnvironmentVariable("JwtSettings__Issuer");
+var jwtAudience = Environment.GetEnvironmentVariable("JwtSettings__Audience");
+
+if (string.IsNullOrEmpty(jwtSecretKey))
 {
-    throw new InvalidOperationException("JwtSettings__SecretKey must be at least 32 characters. Check your .env file.");
+    throw new InvalidOperationException("JWT SecretKey is not configured in environment variables");
 }
 
-// Add Authentication Service
-builder.Services.AddAuthentication(op =>
+builder.Services.AddAuthentication(options =>
 {
-    op.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    op.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    op.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-.AddJwtBearer(op=>
+.AddJwtBearer(options =>
 {
-    op.SaveToken = true;
-    op.RequireHttpsMetadata = false; // set it to true while production
-    op.TokenValidationParameters = new TokenValidationParameters
+    options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = Environment.GetEnvironmentVariable("JwtSettings__Issuer"),
-        ValidAudience = Environment.GetEnvironmentVariable("JwtSettings__Audience"),
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-        ClockSkew = TimeSpan.Zero
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
+        ClockSkew = TimeSpan.Zero,
+        // IMPORTANT: Configure role claim type to match what we use in JWT
+        RoleClaimType = System.Security.Claims.ClaimTypes.Role
     };
 });
 
-// Add Authorization Service
-builder.Services.AddAuthorization();
+// Add authorization with case-insensitive role matching
+builder.Services.AddAuthorization(options =>
+{
+    // Define policies with case-insensitive role checking
+    options.AddPolicy("InstructorPolicy", policy => 
+        policy.RequireAssertion(context => 
+            context.User.IsInRole("instructor") || 
+            context.User.IsInRole("Instructor")));
+    
+    options.AddPolicy("StudentPolicy", policy => 
+        policy.RequireAssertion(context => 
+            context.User.IsInRole("student") || 
+            context.User.IsInRole("Student")));
+    
+    options.AddPolicy("AdminPolicy", policy => 
+        policy.RequireAssertion(context => 
+            context.User.IsInRole("admin") || 
+            context.User.IsInRole("Admin")));
+});
 
-// Register Unit of Work and Generic Repository
-builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-
-// Register Services
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IExamService, ExamService>();
-builder.Services.AddScoped<IExamAttemptService, ExamAttemptService>();
-
-// Add services to the container.
-builder.Services.AddControllers();
-
-// Add Swagger services
+// Add Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -119,9 +135,20 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Add CORS if needed
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -134,13 +161,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-
 app.MapControllers();
 
-// Redirect root URL to Swagger UI
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
 app.Run();

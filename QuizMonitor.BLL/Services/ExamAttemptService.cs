@@ -13,7 +13,6 @@ namespace QuizMonitor.BLL.Services
 {
     public class ExamAttemptService : IExamAttemptService
     {
-
         private readonly IUnitOfWork _unitOfWork;
 
         public ExamAttemptService(IUnitOfWork unitOfWork)
@@ -21,60 +20,63 @@ namespace QuizMonitor.BLL.Services
             _unitOfWork = unitOfWork;
         }
 
-        
-
         public async Task<JoinExamResponseDto> JoinExamAsync(int studentId, JoinExamDto dto)
         {
-            // Find exam by code
+            var student = await _unitOfWork.Users.GetByIdAsync(studentId);
+            if (student == null || student.Role.ToLower() != "student")
+            {
+                throw new UnauthorizedAccessException("Only students can join exams");
+            }
 
-            var exam = await _unitOfWork.Exams.FirstOrDefaultAsync(e => e.ExamCode == dto.ExamCode && e.DeletedAt == null);
-
-            if (exam == null) throw new InvalidOperationException("Exam not found with the provided code");
-
-            // Validate exam is published
-
-            if (exam.IsPublished != true) throw new InvalidOperationException("This exam is not published yet"); 
-            // Validate exam hasn't ended
-
-            if (exam.EndTime.HasValue && DateTime.UtcNow > exam.EndTime.Value) throw new InvalidOperationException("This exam has already ended");
-
-            // Check if student already joined
-
-            var existingAttempt = await _unitOfWork.ExamAttempts
-                .FirstOrDefaultAsync(a => a.ExamId == exam.ExamId 
-                && a.StudentId == studentId 
-                && a.DeletedAt == null);
-
-            if (existingAttempt != null) throw new InvalidOperationException("You have already joined this exam");
+            // Get Exam by code
+            var exam = await _unitOfWork.Exams.FirstOrDefaultAsync(e => e.ExamCode == dto.ExamCode 
+                && e.DeletedAt == null);
             
-            // Get instructor details
+            if (exam == null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            // check if the exam is published
+            if (exam.IsPublished != true)
+            {
+                throw new InvalidOperationException("Exam is not published yet");
+            }
+
+            // check if the exam has ended
+
+            if (exam.EndTime.HasValue && exam.EndTime.Value < DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Exam has ended");
+            }
+
+            // check if student already joined
+
+            var existingAttempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync(ea => ea.ExamId == exam.ExamId
+                && ea.StudentId == studentId && ea.DeletedAt == null);
+            
+            if (existingAttempt != null)
+            {
+                throw new InvalidOperationException("You have already joined this exam");
+            }
+
+            // Get instructor information
             var instructor = await _unitOfWork.Users.GetByIdAsync(exam.InstructorId);
-            if (instructor == null) throw new InvalidOperationException("Instructor not found");
 
-            
-            // Create WAITING attempt
+            // Create exam attempt with status "waiting"
 
             var attempt = new ExamAttempt
             {
                 ExamId = exam.ExamId,
                 StudentId = studentId,
                 Status = "waiting",
-                CheatingStatus = "clean",
-                StartTime = DateTime.UtcNow, // Record when they joined
-                IsGraded = false,
-                TotalViolations = 0,
-                TabSwitchCount = 0,
-                EyeAwayCount = 0,
-                ObjectDetectedCount = 0,
-                MultiplePersonCount = 0
-
+                StartTime = DateTime.UtcNow // Will be updated when exam starts
             };
 
             await _unitOfWork.ExamAttempts.AddAsync(attempt);
             await _unitOfWork.SaveChangesAsync();
 
             // Build rules list
-
             var rules = new List<string>();
             if (exam.TabSwitchingDetection == true)
             {
@@ -101,15 +103,12 @@ namespace QuizMonitor.BLL.Services
                 rules.Add("Only one person should be visible in the camera");
             }
 
-
-            // return JoinExamResponseDto
-
             return new JoinExamResponseDto
             {
                 ExamId = exam.ExamId,
-                InstructorName = instructor.FullName,
+                InstructorName = instructor?.FullName ?? "Unknown",
                 Title = exam.Title,
-                Status = "waiting",
+                Status = "WAITING",
                 StartTime = exam.StartTime,
                 Rules = rules
             };
@@ -117,61 +116,56 @@ namespace QuizMonitor.BLL.Services
 
         public async Task<StartExamResponseDto> StartExamAsync(int studentId, StartExamDto dto)
         {
-            // Find WAITING attempt for this student and exam
-
-            var attempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync
-                (a => a.ExamId == dto.ExamId && a.StudentId == studentId
-                && a.Status == "waiting" && a.DeletedAt == null);
-
+            // Get attempt
+            var attempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync(ea => ea.ExamId == dto.ExamId
+                && ea.StudentId == studentId && ea.DeletedAt == null);
+            
             if (attempt == null)
             {
-                throw new InvalidOperationException("You must join the exam first before starting it");
+                throw new InvalidOperationException("You must join the exam first");
             }
 
+            if (attempt.Status != "waiting")
+            {
+                throw new InvalidOperationException("Exam has already started or ended");
+            }
 
-            // Get exam details
-
+            // Get exam
             var exam = await _unitOfWork.Exams.GetByIdAsync(dto.ExamId);
             if (exam == null || exam.DeletedAt != null)
             {
                 throw new InvalidOperationException("Exam not found");
             }
 
-            // Validate exam time window
-
+            // Check time window
             var now = DateTime.UtcNow;
-            if (exam.StartTime.HasValue && now < exam.StartTime.Value)
+            if (exam.StartTime.HasValue && exam.StartTime.Value > now)
             {
                 throw new InvalidOperationException("Exam has not started yet");
             }
-
-            if (exam.EndTime.HasValue && now > exam.EndTime.Value)
+            if (exam.EndTime.HasValue && exam.EndTime.Value < now)
             {
-                throw new InvalidOperationException("Exam has already ended");
+                throw new InvalidOperationException("Exam has ended");
             }
 
-            // Transition to ACTIVE
+            // Update attempt status
             attempt.Status = "in_progress";
-            attempt.StartTime = now; // Update to actual start time
+            attempt.StartTime = DateTime.UtcNow;
             _unitOfWork.ExamAttempts.Update(attempt);
             await _unitOfWork.SaveChangesAsync();
 
-            // Get total questions count
-
-            var totalQuestions = await _unitOfWork.Questions.FindAsync(q => q.ExamId == exam.ExamId && q.DeletedAt == null);
-            var questionsList = totalQuestions.OrderBy(q => q.OrderNumber).ToList();
-
-            if (!questionsList.Any())
+            // Get first question
+            var firstQuestion = await _unitOfWork.Questions.FirstOrDefaultAsync(q => q.ExamId == exam.ExamId
+                && q.OrderNumber == 1 && q.DeletedAt == null);
+            
+            if (firstQuestion == null)
             {
-                throw new InvalidOperationException("This exam has no questions");
+                throw new InvalidOperationException("No questions found for this exam");
             }
 
-            // Get first question
-
-            var firstQuestion = questionsList.First();
-            var firstQuestionDto = await MapToQuestionResponseDto(firstQuestion);
-
-            // return StartExamResponseDto
+            // Get total questions count
+            var totalQuestions = await _unitOfWork.Questions.CountAsync(q => q.ExamId == exam.ExamId 
+                && q.DeletedAt == null);
 
             return new StartExamResponseDto
             {
@@ -181,23 +175,18 @@ namespace QuizMonitor.BLL.Services
                 {
                     Title = exam.Title,
                     DurationMinutes = exam.DurationMinutes,
-                    TotalQuestions = questionsList.Count
+                    TotalQuestions = totalQuestions
                 },
-                FirstQuestion = firstQuestionDto
+                FirstQuestion = await MapToQuestionResponseDto(firstQuestion)
             };
         }
 
-
-
         public async Task<QuestionResponseDto> GetQuestionByOrderAsync(int attemptId, int studentId, int orderNumber)
         {
-            // validate if the attmept belongs to the student
+            // validate attempt
             var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
-            
             if (attempt == null || attempt.DeletedAt != null) throw new InvalidOperationException("Exam attempt not found");
-
-            if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to the student");
-
+            if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
             if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
             var question = await _unitOfWork.Questions.FirstOrDefaultAsync(q => q.ExamId == attempt.ExamId
@@ -220,46 +209,60 @@ namespace QuizMonitor.BLL.Services
             if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
             // validate question belongs to the exam
-
             var question = await _unitOfWork.Questions.GetByIdAsync(dto.QuestionId);
             if (question == null || question.DeletedAt != null || question.ExamId != attempt.ExamId)
             {
                 throw new InvalidOperationException("Question not found or does not belong to this exam");
             }
 
-            // check if the answer already exist
-
+            // check if the answer already exists
             var existingAnswer = await _unitOfWork.QuestionAnswers.FirstOrDefaultAsync(qa => qa.AttemptId == attemptId
                 && qa.QuestionId == dto.QuestionId && qa.DeletedAt == null);
 
-            // calc the score for MCQs
-
+            // calculate score for MCQs
             decimal score = 0;
             bool isCorrect = false;
 
-            if (question.QuestionType.StartsWith("MCQ"))
+            if (question.QuestionType.ToLower().StartsWith("mcq"))
             {
-                // gather all choices that related to that question
-                var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
-                // gather the IDs of corrected choices
-                var correctChoices = choices.Where(c => c.IsCorrect == true).Select(c => c.ChoiceId).ToList();
-                // compare between selected choices that the student has selected and corrected choices
-                var selectedChoicesSet = dto.SelectedChoices.OrderBy(x => x).ToList();
-                var correctChoicesSet = correctChoices.OrderBy(x => x).ToList();
+                if (dto.SelectedChoices == null || !dto.SelectedChoices.Any())
+                {
+                    // No answer selected - score is 0
+                    score = 0;
+                    isCorrect = false;
+                }
+                else
+                {
+                    // gather all choices related to that question
+                    var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
+                    // gather the IDs of correct choices
+                    var correctChoices = choices.Where(c => c.IsCorrect == true).Select(c => c.ChoiceId).ToList();
+                    // compare selected choices with correct choices
+                    var selectedChoicesSet = dto.SelectedChoices.OrderBy(x => x).ToList();
+                    var correctChoicesSet = correctChoices.OrderBy(x => x).ToList();
 
-                isCorrect = selectedChoicesSet.SequenceEqual(correctChoicesSet);
+                    isCorrect = selectedChoicesSet.SequenceEqual(correctChoicesSet);
 
-                if (isCorrect) score = question.Points;
-                else score = 0;
+                    if (isCorrect) score = question.Points;
+                    else score = 0;
+                }
+            }
+            else if (question.QuestionType.ToLower() == "open_ended")
+            {
+                // Open-ended questions don't get auto-scored
+                score = 0;
+                isCorrect = false;
             }
 
-            var selectedChoicesJson = JsonSerializer.Serialize(dto.SelectedChoices);
             if (existingAnswer != null)
             {
                 // Update existing answer
-                existingAnswer.SelectedChoices = selectedChoicesJson;
-                existingAnswer.Score = question.QuestionType.StartsWith("MCQ") ? score : null;
-                existingAnswer.IsCorrect = question.QuestionType.StartsWith("MCQ") ? isCorrect : null;
+                existingAnswer.SelectedChoices = dto.SelectedChoices != null && dto.SelectedChoices.Any() 
+                    ? JsonSerializer.Serialize(dto.SelectedChoices) 
+                    : null;
+                existingAnswer.AnswerText = dto.AnswerText;
+                existingAnswer.Score = question.QuestionType.ToLower().StartsWith("mcq") ? score : (decimal?)null;
+                existingAnswer.IsCorrect = question.QuestionType.ToLower().StartsWith("mcq") ? isCorrect : (bool?)null;
                 existingAnswer.StartedAt = dto.StartedAt;
                 existingAnswer.AnsweredAt = dto.AnsweredAt;
                 existingAnswer.TimeSpentSeconds = dto.TimeSpentSeconds;
@@ -276,34 +279,32 @@ namespace QuizMonitor.BLL.Services
             }
             else
             {
-                // Insert new answer
-                var newAnswer = new QuestionAnswer
+                // Create new answer
+                var answer = new QuestionAnswer
                 {
                     AttemptId = attemptId,
                     QuestionId = dto.QuestionId,
-                    SelectedChoices = selectedChoicesJson,
-                    Score = question.QuestionType.StartsWith("MCQ") ? score : null,
-                    IsCorrect = question.QuestionType.StartsWith("MCQ") ? isCorrect : null,
+                    SelectedChoices = dto.SelectedChoices != null && dto.SelectedChoices.Any() 
+                        ? JsonSerializer.Serialize(dto.SelectedChoices) 
+                        : null,
+                    AnswerText = dto.AnswerText,
+                    Score = question.QuestionType.ToLower().StartsWith("mcq") ? score : (decimal?)null,
+                    IsCorrect = question.QuestionType.ToLower().StartsWith("mcq") ? isCorrect : (bool?)null,
                     StartedAt = dto.StartedAt,
                     AnsweredAt = dto.AnsweredAt,
-                    TimeSpentSeconds = dto.TimeSpentSeconds,
-                    ViolationCount = 0,
-                    IsManuallyGraded = false
+                    TimeSpentSeconds = dto.TimeSpentSeconds
                 };
 
-                await _unitOfWork.QuestionAnswers.AddAsync(newAnswer);
+                await _unitOfWork.QuestionAnswers.AddAsync(answer);
                 await _unitOfWork.SaveChangesAsync();
 
                 return new SaveAnswerResponseDto
                 {
-                    AnswerId = newAnswer.AnswerId,
+                    AnswerId = answer.AnswerId,
                     IsCorrect = isCorrect,
                     Score = score
                 };
             }
-
-
-
         }
 
         public async Task<LogViolationResponseDto> LogViolationAsync(int attemptId, int studentId, LogViolationDto dto)
@@ -314,13 +315,15 @@ namespace QuizMonitor.BLL.Services
             if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
             if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
-            // create violation event
+            // Normalize violation type to lowercase for database
+            var normalizedViolationType = dto.ViolationType.ToLower().Replace("_", "_");
 
+            // create violation event
             var violation = new ViolationEvent
             {
                 AttemptId = attemptId,
                 QuestionId = dto.QuestionId,
-                ViolationType = dto.ViolationType,
+                ViolationType = normalizedViolationType,
                 Description = dto.Description,
                 DurationSeconds = dto.DurationSeconds,
                 ScreenshotUrl = dto.ScreenshotUrl,
@@ -331,21 +334,20 @@ namespace QuizMonitor.BLL.Services
             await _unitOfWork.ViolationEvents.AddAsync(violation);
 
             // update attempt violation counters
-
             attempt.TotalViolations = (attempt.TotalViolations ?? 0) + 1;
 
-            switch (dto.ViolationType.ToUpper())
+            switch (normalizedViolationType)
             {
-                case "TAB_SWITCH":
+                case "tab_switch":
                     attempt.TabSwitchCount = (attempt.TabSwitchCount ?? 0) + 1;
                     break;
-                case "EYE_AWAY":
+                case "eye_away":
                     attempt.EyeAwayCount = (attempt.EyeAwayCount ?? 0) + 1;
                     break;
-                case "MULTIPLE_PERSON":
+                case "multiple_person":
                     attempt.MultiplePersonCount = (attempt.MultiplePersonCount ?? 0) + 1;
                     break;
-                case "OBJECT_DETECTED":
+                case "object_detected":
                     attempt.ObjectDetectedCount = (attempt.ObjectDetectedCount ?? 0) + 1;
                     break;
             }
@@ -358,8 +360,6 @@ namespace QuizMonitor.BLL.Services
                 ViolationId = violation.ViolationId,
                 TotalViolations = attempt.TotalViolations ?? 0
             };
-
-
         }
 
         public async Task<SubmitExamResponseDto> SubmitExamAsync(int attemptId, int studentId)
@@ -380,16 +380,19 @@ namespace QuizMonitor.BLL.Services
                 throw new InvalidOperationException("Exam attempt is not active");
             }
 
-            // calc total duration
+            // Calculate total duration
             var submitTime = DateTime.UtcNow;
             var duration = (int)(submitTime - attempt.StartTime).TotalSeconds;
 
-            // calc MCQ score
+            // Recalculate MCQ score from all answers
+            var answers = await _unitOfWork.QuestionAnswers.FindAsync(qa => 
+                qa.AttemptId == attemptId && qa.DeletedAt == null);
+            
+            var mcqScore = answers
+                .Where(a => a.Score.HasValue)
+                .Sum(a => a.Score.Value);
 
-            var answers = await _unitOfWork.QuestionAnswers.FindAsync(qa => qa.AttemptId == attemptId && qa.DeletedAt == null);
-            var mcqScore = answers.Where(a => a.Score.HasValue).Sum(a => a.Score.Value);
-
-            // update attempt
+            // Update attempt
             attempt.Status = "submitted";
             attempt.SubmitTime = submitTime;
             attempt.TotalDurationSeconds = duration;
@@ -401,15 +404,15 @@ namespace QuizMonitor.BLL.Services
 
             // Determine cheating status
             var totalViolations = attempt.TotalViolations ?? 0;
-            string cheatingStatus = "flagged";
+            string cheatingStatus = "FLAGGED";
 
-            if (totalViolations == 0) cheatingStatus = "clean";
-            else if (totalViolations <= 3) cheatingStatus = "warning";
-            else cheatingStatus = "flagged";
+            if (totalViolations == 0) cheatingStatus = "CLEAN";
+            else if (totalViolations <= 3) cheatingStatus = "WARNING";
+            else cheatingStatus = "FLAGGED";
 
             return new SubmitExamResponseDto
             {
-                Status = "submitted",
+                Status = "SUBMITTED",
                 McqScore = mcqScore,
                 ManualScore = attempt.ManualScore,
                 FinalScore = attempt.FinalScore ?? 0,
@@ -422,6 +425,20 @@ namespace QuizMonitor.BLL.Services
         {
             var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
 
+            // Only return choices for MCQ questions
+            List<ChoiceDto>? choicesList = null;
+            if (question.QuestionType.ToLower().StartsWith("mcq"))
+            {
+                choicesList = choices.OrderBy(c => c.OrderNumber)
+                    .Select(c => new ChoiceDto
+                    {
+                        ChoiceId = c.ChoiceId,
+                        Text = c.ChoiceText,
+                        IsCorrect = false, // Never expose correct answers to students
+                        OrderNumber = c.OrderNumber
+                    }).ToList();
+            }
+
             return new QuestionResponseDto
             {
                 QuestionId = question.QuestionId,
@@ -432,14 +449,7 @@ namespace QuizMonitor.BLL.Services
                 OrderNumber = question.OrderNumber,
                 IsRequired = question.IsRequired ?? true,
                 CreatedAt = question.CreatedAt,
-                Choices = choices.OrderBy(c => c.OrderNumber)
-                    .Select(c => new ChoiceDto
-                    {
-                        ChoiceId = c.ChoiceId,
-                        Text = c.ChoiceText,
-                        IsCorrect = false, // Never expose correct answers to students
-                        OrderNumber = c.OrderNumber  
-                    }).ToList()
+                Choices = choicesList
             };
         }
     }

@@ -47,6 +47,8 @@ public partial class ExamAttempt
 
     public int? DeletedBy { get; set; }
 
+    public string? CheatingStatus { get; set; }
+
     public virtual User? DeletedByNavigation { get; set; }
 
     public virtual Exam Exam { get; set; } = null!;
