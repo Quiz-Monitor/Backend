@@ -41,6 +41,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IExamAttemptService, ExamAttemptService>();
+builder.Services.AddScoped<IStudentService, StudentService>();
 
 // Add controllers
 builder.Services.AddControllers();
@@ -81,19 +82,19 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     // Define policies with case-insensitive role checking
-    options.AddPolicy("InstructorPolicy", policy => 
-        policy.RequireAssertion(context => 
-            context.User.IsInRole("instructor") || 
+    options.AddPolicy("InstructorPolicy", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("instructor") ||
             context.User.IsInRole("Instructor")));
-    
-    options.AddPolicy("StudentPolicy", policy => 
-        policy.RequireAssertion(context => 
-            context.User.IsInRole("student") || 
+
+    options.AddPolicy("StudentPolicy", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("student") ||
             context.User.IsInRole("Student")));
-    
-    options.AddPolicy("AdminPolicy", policy => 
-        policy.RequireAssertion(context => 
-            context.User.IsInRole("admin") || 
+
+    options.AddPolicy("AdminPolicy", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("admin") ||
             context.User.IsInRole("Admin")));
 });
 

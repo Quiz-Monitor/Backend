@@ -14,7 +14,7 @@ namespace QuizMonitor.API.Controllers
     [Route("api")]
     [Authorize]
     [Produces("application/json")]
-    
+
     public class ExamAttemptsController : ControllerBase
     {
         private readonly IExamAttemptService _examAttemptService;
@@ -229,6 +229,41 @@ namespace QuizMonitor.API.Controllers
             {
                 _logger.LogError(ex, "Error submitting exam");
                 return StatusCode(500, new { message = "An error occurred while submitting the exam" });
+            }
+        }
+
+        /// <summary>
+        /// Get detailed report of a student's exam attempt (instructor only)
+        /// </summary>
+        [HttpGet("exam-attempts/{attemptId}/details")]
+        [Authorize(Roles = "instructor")]
+        public async Task<IActionResult> GetExamAttemptDetails(int attemptId)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+                {
+                    return Unauthorized(new { message = "Invalid user token" });
+                }
+
+                var result = await _examAttemptService.GetExamAttemptDetailsAsync(attemptId, instructorId);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to get exam attempt details: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized access to exam attempt details: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting exam attempt details");
+                return StatusCode(500, new { message = "An error occurred while retrieving exam attempt details" });
             }
         }
 

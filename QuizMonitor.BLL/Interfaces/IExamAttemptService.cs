@@ -14,6 +14,7 @@ namespace QuizMonitor.BLL.Interfaces
         Task<SaveAnswerResponseDto> SaveAnswerAsync(int attemptId, int studentId, SaveAnswerDto dto);
         Task<LogViolationResponseDto> LogViolationAsync(int attemptId, int studentId, LogViolationDto dto);
         Task<SubmitExamResponseDto> SubmitExamAsync(int attemptId, int studentId);
-        
+        Task<ExamAttemptDetailResponseDto> GetExamAttemptDetailsAsync(int attemptId, int instructorId);
+
     }
 }
