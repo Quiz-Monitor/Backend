@@ -32,23 +32,29 @@ namespace QuizMonitor.BLL.Services
                 ea.DeletedAt == null &&
                 ea.IsGraded == true);
 
+            if (!examAttempts.Any())
+            {
+                return new List<StudentExamResultResponseDto>();
+            }
+
+            // Batch fetch all required exams to avoid N+1 problem
+            var examIds = examAttempts.Select(ea => ea.ExamId).Distinct().ToList();
+            var exams = await _unitOfWork.Exams.FindAsync(e => examIds.Contains(e.Id) && e.DeletedAt == null);
+            var examDictionary = exams.ToDictionary(e => e.Id);
+
             var results = new List<StudentExamResultResponseDto>();
 
             foreach (var attempt in examAttempts)
             {
-                // Get the exam details
-                var exam = await _unitOfWork.Exams.GetByIdAsync(attempt.ExamId);
-                if (exam == null || exam.DeletedAt != null)
+                if (examDictionary.TryGetValue(attempt.ExamId, out var exam))
                 {
-                    continue;
+                    results.Add(new StudentExamResultResponseDto
+                    {
+                        ExamTitle = exam.Title,
+                        FinalScore = attempt.FinalScore,
+                        CheatingStatus = attempt.CheatingStatus ?? "CLEAN"
+                    });
                 }
-
-                results.Add(new StudentExamResultResponseDto
-                {
-                    ExamTitle = exam.Title,
-                    FinalScore = attempt.FinalScore,
-                    CheatingStatus = attempt.CheatingStatus ?? "CLEAN"
-                });
             }
 
             return results;
