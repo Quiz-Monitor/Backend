@@ -39,8 +39,8 @@ namespace QuizMonitor.BLL.Services
 
             // Batch fetch all required exams to avoid N+1 problem
             var examIds = examAttempts.Select(ea => ea.ExamId).Distinct().ToList();
-            var exams = await _unitOfWork.Exams.FindAsync(e => examIds.Contains(e.Id) && e.DeletedAt == null);
-            var examDictionary = exams.ToDictionary(e => e.Id);
+            var exams = await _unitOfWork.Exams.FindAsync(e => examIds.Contains(e.ExamId) && e.DeletedAt == null);
+            var examDictionary = exams.ToDictionary(e => e.ExamId);
 
             var results = new List<StudentExamResultResponseDto>();
 
