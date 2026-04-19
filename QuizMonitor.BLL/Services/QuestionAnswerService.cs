@@ -62,15 +62,15 @@ namespace QuizMonitor.BLL.Services
             }
 
             // 6. Validate score does not exceed question points
-            if (dto.Score < 0)
+            if (dto.Score.Value < 0)
             {
                 throw new InvalidOperationException("Score cannot be negative");
             }
 
-            if (dto.Score > question.Points)
+            if (dto.Score.Value > question.Points)
             {
                 throw new InvalidOperationException(
-                    $"Score ({dto.Score}) cannot exceed maximum points ({question.Points}) for this question");
+                    $"Score ({dto.Score.Value}) cannot exceed maximum points ({question.Points}) for this question");
             }
 
             // 7. Validate question type (Only open-ended questions can be manually graded)
@@ -80,7 +80,7 @@ namespace QuizMonitor.BLL.Services
             }
 
             // 8. Update answer record
-            answer.Score = dto.Score;
+            answer.Score = dto.Score.Value;
             answer.InstructorFeedback = dto.Feedback;
             answer.IsManuallyGraded = true;
 
