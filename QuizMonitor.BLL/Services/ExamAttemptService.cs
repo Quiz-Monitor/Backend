@@ -448,25 +448,40 @@ namespace QuizMonitor.BLL.Services
 
             var questionDetailsList = new List<QuestionDetailDto>();
 
+            // Batch fetch all related data
+            var questionIds = questionAnswers.Select(qa => qa.QuestionId).Distinct().ToList();
+            var questions = await _unitOfWork.Questions.FindAsync(q =>
+                questionIds.Contains(q.QuestionId) && q.DeletedAt == null);
+            // question dictionary contains questionId as key and question object as value for quick lookup of this attempt's questions
+            var questionDict = questions.ToDictionary(q => q.QuestionId);
+
+
+            var answerIds = questionAnswers.Select(qa => qa.AnswerId).ToList();
+            // answerViolations contains all violations related to this attempt's answers
+            var allAnswerViolations = await _unitOfWork.AnswerViolations.FindAsync(
+                av => answerIds.Contains(av.AnswerId));
+
+
+            var violationIds = allAnswerViolations.Select(av => av.ViolationId).Distinct().ToList();
+            var allViolationEvents = await _unitOfWork.ViolationEvents.FindAsync(
+                v => violationIds.Contains(v.ViolationId) && v.DeletedAt == null);
+            // violationDict contains violationId as key and violation event object as value for quick lookup of all violations related to this attempt's answers
+            var violationDict = allViolationEvents.ToDictionary(v => v.ViolationId);
+
             foreach (var qa in questionAnswers)
             {
-                // Get the question
-                var question = await _unitOfWork.Questions.GetByIdAsync(qa.QuestionId);
-                if (question == null || question.DeletedAt != null)
+                if (!questionDict.TryGetValue(qa.QuestionId, out var question))
                 {
                     continue;
                 }
-
-                // Get violations for this answer
-                var answerViolations = await _unitOfWork.AnswerViolations.FindAsync(av => av.AnswerId == qa.AnswerId);
+                // For each answer, find all related violations and gather their types
+                var answerViolations = allAnswerViolations.Where(av => av.AnswerId == qa.AnswerId);
                 var violationTypes = new List<string>();
 
                 foreach (var av in answerViolations)
                 {
-                    var violation = await _unitOfWork.ViolationEvents.GetByIdAsync(av.ViolationId);
-                    if (violation != null && violation.DeletedAt == null)
+                    if (violationDict.TryGetValue(av.ViolationId, out var violation))
                     {
-                        // Convert violation type to uppercase format (e.g., "tab_switch" -> "TAB_SWITCH")
                         violationTypes.Add(violation.ViolationType.ToUpper());
                     }
                 }
