@@ -21,7 +21,7 @@ namespace QuizMonitor.BLL.Services
         {
             // Verify student exists
             var student = await _unitOfWork.Users.GetByIdAsync(studentId);
-            if (student == null || student.Role.ToLower() != "student")
+            if (student == null || !string.Equals(student.Role, "student", StringComparison.OrdinalIgnoreCase))
             {
                 throw new UnauthorizedAccessException("Only students can access this endpoint");
             }
