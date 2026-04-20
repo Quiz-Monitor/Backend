@@ -29,9 +29,9 @@ namespace QuizMonitor.BLL.Services
             }
 
             // Get Exam by code
-            var exam = await _unitOfWork.Exams.FirstOrDefaultAsync(e => e.ExamCode == dto.ExamCode 
+            var exam = await _unitOfWork.Exams.FirstOrDefaultAsync(e => e.ExamCode == dto.ExamCode
                 && e.DeletedAt == null);
-            
+
             if (exam == null)
             {
                 throw new InvalidOperationException("Exam not found");
@@ -54,7 +54,7 @@ namespace QuizMonitor.BLL.Services
 
             var existingAttempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync(ea => ea.ExamId == exam.ExamId
                 && ea.StudentId == studentId && ea.DeletedAt == null);
-            
+
             if (existingAttempt != null)
             {
                 throw new InvalidOperationException("You have already joined this exam");
@@ -119,7 +119,7 @@ namespace QuizMonitor.BLL.Services
             // Get attempt
             var attempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync(ea => ea.ExamId == dto.ExamId
                 && ea.StudentId == studentId && ea.DeletedAt == null);
-            
+
             if (attempt == null)
             {
                 throw new InvalidOperationException("You must join the exam first");
@@ -157,14 +157,14 @@ namespace QuizMonitor.BLL.Services
             // Get first question
             var firstQuestion = await _unitOfWork.Questions.FirstOrDefaultAsync(q => q.ExamId == exam.ExamId
                 && q.OrderNumber == 1 && q.DeletedAt == null);
-            
+
             if (firstQuestion == null)
             {
                 throw new InvalidOperationException("No questions found for this exam");
             }
 
             // Get total questions count
-            var totalQuestions = await _unitOfWork.Questions.CountAsync(q => q.ExamId == exam.ExamId 
+            var totalQuestions = await _unitOfWork.Questions.CountAsync(q => q.ExamId == exam.ExamId
                 && q.DeletedAt == null);
 
             return new StartExamResponseDto
@@ -191,7 +191,7 @@ namespace QuizMonitor.BLL.Services
 
             var question = await _unitOfWork.Questions.FirstOrDefaultAsync(q => q.ExamId == attempt.ExamId
                 && q.OrderNumber == orderNumber && q.DeletedAt == null);
-            
+
             if (question == null)
             {
                 throw new InvalidOperationException("Question not found");
@@ -257,8 +257,8 @@ namespace QuizMonitor.BLL.Services
             if (existingAnswer != null)
             {
                 // Update existing answer
-                existingAnswer.SelectedChoices = dto.SelectedChoices != null && dto.SelectedChoices.Any() 
-                    ? JsonSerializer.Serialize(dto.SelectedChoices) 
+                existingAnswer.SelectedChoices = dto.SelectedChoices != null && dto.SelectedChoices.Any()
+                    ? JsonSerializer.Serialize(dto.SelectedChoices)
                     : null;
                 existingAnswer.AnswerText = dto.AnswerText;
                 existingAnswer.Score = question.QuestionType.ToLower().StartsWith("mcq") ? score : (decimal?)null;
@@ -284,8 +284,8 @@ namespace QuizMonitor.BLL.Services
                 {
                     AttemptId = attemptId,
                     QuestionId = dto.QuestionId,
-                    SelectedChoices = dto.SelectedChoices != null && dto.SelectedChoices.Any() 
-                        ? JsonSerializer.Serialize(dto.SelectedChoices) 
+                    SelectedChoices = dto.SelectedChoices != null && dto.SelectedChoices.Any()
+                        ? JsonSerializer.Serialize(dto.SelectedChoices)
                         : null,
                     AnswerText = dto.AnswerText,
                     Score = question.QuestionType.ToLower().StartsWith("mcq") ? score : (decimal?)null,
@@ -385,9 +385,9 @@ namespace QuizMonitor.BLL.Services
             var duration = (int)(submitTime - attempt.StartTime).TotalSeconds;
 
             // Recalculate MCQ score from all answers
-            var answers = await _unitOfWork.QuestionAnswers.FindAsync(qa => 
+            var answers = await _unitOfWork.QuestionAnswers.FindAsync(qa =>
                 qa.AttemptId == attemptId && qa.DeletedAt == null);
-            
+
             var mcqScore = answers
                 .Where(a => a.Score.HasValue)
                 .Sum(a => a.Score.Value);
@@ -418,6 +418,94 @@ namespace QuizMonitor.BLL.Services
                 FinalScore = attempt.FinalScore ?? 0,
                 TotalViolations = totalViolations,
                 CheatingStatus = cheatingStatus
+            };
+        }
+
+        public async Task<ExamAttemptDetailResponseDto> GetExamAttemptDetailsAsync(int attemptId, int instructorId)
+        {
+            // Get the exam attempt
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            if (attempt == null || attempt.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam attempt not found");
+            }
+
+            // Get the exam and verify instructor owns it
+            var exam = await _unitOfWork.Exams.GetByIdAsync(attempt.ExamId);
+            if (exam == null || exam.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            if (exam.InstructorId != instructorId)
+            {
+                throw new UnauthorizedAccessException("You do not have access to this exam attempt");
+            }
+
+            // Get all question answers for this attempt
+            var questionAnswers = await _unitOfWork.QuestionAnswers.FindAsync(qa =>
+                qa.AttemptId == attemptId && qa.DeletedAt == null);
+
+            var questionDetailsList = new List<QuestionDetailDto>();
+
+            // Batch fetch all related data
+            var questionIds = questionAnswers.Select(qa => qa.QuestionId).Distinct().ToList();
+            var questions = await _unitOfWork.Questions.FindAsync(q =>
+                questionIds.Contains(q.QuestionId) && q.DeletedAt == null);
+            // question dictionary contains questionId as key and question object as value for quick lookup of this attempt's questions
+            var questionDict = questions.ToDictionary(q => q.QuestionId);
+
+
+            var answerIds = questionAnswers.Select(qa => qa.AnswerId).ToList();
+            // answerViolations contains all violations related to this attempt's answers
+            var allAnswerViolations = await _unitOfWork.AnswerViolations.FindAsync(
+                av => answerIds.Contains(av.AnswerId));
+
+
+            var violationIds = allAnswerViolations.Select(av => av.ViolationId).Distinct().ToList();
+            var allViolationEvents = await _unitOfWork.ViolationEvents.FindAsync(
+                v => violationIds.Contains(v.ViolationId) && v.DeletedAt == null);
+            // violationDict contains violationId as key and violation event object as value for quick lookup of all violations related to this attempt's answers
+            var violationDict = allViolationEvents.ToDictionary(v => v.ViolationId);
+
+            foreach (var qa in questionAnswers)
+            {
+                if (!questionDict.TryGetValue(qa.QuestionId, out var question))
+                {
+                    continue;
+                }
+                // For each answer, find all related violations and gather their types
+                var answerViolations = allAnswerViolations.Where(av => av.AnswerId == qa.AnswerId);
+                var violationTypes = new List<string>();
+
+                foreach (var av in answerViolations)
+                {
+                    if (violationDict.TryGetValue(av.ViolationId, out var violation))
+                    {
+                        violationTypes.Add(violation.ViolationType.ToUpper());
+                    }
+                }
+
+                questionDetailsList.Add(new QuestionDetailDto
+                {
+                    QuestionText = question.QuestionText,
+                    TimeSpentSeconds = qa.TimeSpentSeconds,
+                    Violations = violationTypes
+                });
+            }
+
+            // Build violation summary from attempt counters
+            var violationSummary = new ViolationSummaryDto
+            {
+                TabSwitch = attempt.TabSwitchCount ?? 0,
+                EyeAway = attempt.EyeAwayCount ?? 0,
+                MultiplePersons = attempt.MultiplePersonCount ?? 0
+            };
+
+            return new ExamAttemptDetailResponseDto
+            {
+                Questions = questionDetailsList,
+                ViolationSummary = violationSummary
             };
         }
 

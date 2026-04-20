@@ -133,11 +133,12 @@ public class ExamsController : ControllerBase
         {
             _logger.LogError(ex, "Error adding question: {Message}", ex.Message);
             var innerMessage = ex.InnerException?.Message ?? ex.Message;
-            var fullError = ex.InnerException != null 
-                ? $"{ex.Message} | Inner: {ex.InnerException.Message}" 
+            var fullError = ex.InnerException != null
+                ? $"{ex.Message} | Inner: {ex.InnerException.Message}"
                 : ex.Message;
-            return StatusCode(500, new { 
-                message = "An error occurred while adding the question", 
+            return StatusCode(500, new
+            {
+                message = "An error occurred while adding the question",
                 error = fullError,
                 innerException = innerMessage,
                 stackTrace = ex.StackTrace
@@ -209,8 +210,8 @@ public class ExamsController : ControllerBase
             }
 
             await _examService.RemoveQuestionAsync(examId, questionId, instructorId);
-            return Ok(new 
-            { 
+            return Ok(new
+            {
                 message = "Question deleted successfully",
                 questionId,
                 examId
@@ -232,4 +233,84 @@ public class ExamsController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while removing the question" });
         }
     }
+
+    /// <summary>
+    /// Get exam results for all students
+    /// </summary>
+    /// <param name="examId">Exam ID</param>
+    /// <returns>List of student results</returns>
+    [HttpGet("{examId}/results")]
+    [ProducesResponseType(typeof(List<StudentExamResultDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<List<StudentExamResultDto>>> GetExamResults(int examId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var results = await _examService.GetExamResultsAsync(examId, instructorId);
+            return Ok(results);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized exam results access attempt");
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid exam results operation");
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving exam results");
+            return StatusCode(500, new { message = "An error occurred while retrieving exam results" });
+        }
+    }
+
+   
+
+    /// <summary>
+    /// Get all exams for the instructor
+    /// </summary>
+    /// <returns>List of instructor exams</returns>
+    [HttpGet]
+    [ProducesResponseType(typeof(List<InstructorExamDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<List<InstructorExamDto>>> GetInstructorExams()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var exams = await _examService.GetInstructorExamsAsync(instructorId);
+            return Ok(exams);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized instructor exams access attempt");
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid instructor exams operation ");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving instructor exams");
+            return StatusCode(500, new { message = "An error occurred while retrieving instructor exams" });
+        }
+    }
+
 }

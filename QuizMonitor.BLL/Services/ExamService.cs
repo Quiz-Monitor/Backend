@@ -58,7 +58,7 @@ namespace QuizMonitor.BLL.Services
         public async Task<ExamResponseDto> PublishExamAsync(int examId, int instructorId)
         {
             var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
-            
+
             if (exam == null || exam.DeletedAt != null)
             {
                 throw new InvalidOperationException("Exam not found");
@@ -86,7 +86,7 @@ namespace QuizMonitor.BLL.Services
         public async Task<QuestionResponseDto> AddQuestionAsync(int examId, int instructorId, CreateQuestionDto dto)
         {
             var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
-            
+
             if (exam == null || exam.DeletedAt != null)
             {
                 throw new InvalidOperationException("Exam not found");
@@ -112,19 +112,19 @@ namespace QuizMonitor.BLL.Services
                 { "short_answer", "open_ended" },
                 { "essay", "open_ended" }
             };
-            
+
             var inputType = dto.QuestionType.ToLower();
             if (!typeMapping.ContainsKey(inputType))
             {
                 throw new InvalidOperationException($"Invalid question type. Must be one of: {string.Join(", ", typeMapping.Keys)}");
             }
-            
+
             var normalizedType = typeMapping[inputType];
 
             // Check for duplicate order number
             var existingQuestion = await _unitOfWork.Questions.FirstOrDefaultAsync(
                 q => q.ExamId == examId && q.OrderNumber == dto.OrderNumber && q.DeletedAt == null);
-            
+
             if (existingQuestion != null)
             {
                 throw new InvalidOperationException($"A question with order number {dto.OrderNumber} already exists in this exam");
@@ -157,7 +157,7 @@ namespace QuizMonitor.BLL.Services
                     .Where(g => g.Count() > 1)
                     .Select(g => g.Key)
                     .ToList();
-                
+
                 if (duplicateOrders.Any())
                 {
                     throw new InvalidOperationException($"Duplicate choice order numbers found: {string.Join(", ", duplicateOrders)}");
@@ -202,7 +202,7 @@ namespace QuizMonitor.BLL.Services
         public async Task<QuestionResponseDto> UpdateQuestionAsync(int examId, int questionId, int instructorId, UpdateQuestionDto dto)
         {
             var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
-            
+
             if (exam == null || exam.DeletedAt != null)
             {
                 throw new InvalidOperationException("Exam not found");
@@ -219,7 +219,7 @@ namespace QuizMonitor.BLL.Services
             }
 
             var question = await _unitOfWork.Questions.GetByIdAsync(questionId);
-            
+
             if (question == null || question.DeletedAt != null || question.ExamId != examId)
             {
                 throw new InvalidOperationException("Question not found");
@@ -235,31 +235,31 @@ namespace QuizMonitor.BLL.Services
                 { "short_answer", "open_ended" },
                 { "essay", "open_ended" }
             };
-            
+
             var inputType = dto.QuestionType.ToLower();
             if (!typeMapping.ContainsKey(inputType))
             {
                 throw new InvalidOperationException($"Invalid question type. Must be one of: {string.Join(", ", typeMapping.Keys)}");
             }
-            
+
             question.QuestionType = typeMapping[inputType];
             question.QuestionText = dto.QuestionText;
             question.QuestionImageUrl = dto.QuestionImageUrl;
             question.Points = dto.Points;
-            
+
             // Check for duplicate order number if changing order
             if (question.OrderNumber != dto.OrderNumber)
             {
                 var existingQuestion = await _unitOfWork.Questions.FirstOrDefaultAsync(
                     q => q.ExamId == examId && q.OrderNumber == dto.OrderNumber && q.QuestionId != questionId && q.DeletedAt == null);
-                
+
                 if (existingQuestion != null)
                 {
                     throw new InvalidOperationException($"A question with order number {dto.OrderNumber} already exists in this exam");
                 }
                 question.OrderNumber = dto.OrderNumber;
             }
-            
+
             question.IsRequired = dto.IsRequired;
 
             _unitOfWork.Questions.Update(question);
@@ -273,16 +273,16 @@ namespace QuizMonitor.BLL.Services
                     .Where(g => g.Count() > 1)
                     .Select(g => g.Key)
                     .ToList();
-                
+
                 if (duplicateOrders.Any())
                 {
                     throw new InvalidOperationException($"Duplicate choice order numbers found: {string.Join(", ", duplicateOrders)}");
                 }
                 // Get existing choices
                 var existingChoices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == questionId);
-                
+
                 // Remove choices that are not in the update list
-                var choicesToRemove = existingChoices.Where(c => 
+                var choicesToRemove = existingChoices.Where(c =>
                     !dto.Choices.Any(dc => dc.ChoiceId == c.ChoiceId));
                 _unitOfWork.Choices.DeleteRange(choicesToRemove);
 
@@ -344,7 +344,7 @@ namespace QuizMonitor.BLL.Services
         public async Task<bool> RemoveQuestionAsync(int examId, int questionId, int instructorId)
         {
             var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
-            
+
             if (exam == null || exam.DeletedAt != null)
             {
                 throw new InvalidOperationException("Exam not found");
@@ -361,7 +361,7 @@ namespace QuizMonitor.BLL.Services
             }
 
             var question = await _unitOfWork.Questions.GetByIdAsync(questionId);
-            
+
             if (question == null || question.DeletedAt != null || question.ExamId != examId)
             {
                 throw new InvalidOperationException("Question not found");
@@ -374,6 +374,87 @@ namespace QuizMonitor.BLL.Services
 
             return true;
         }
+
+        public async Task<List<StudentExamResultDto>> GetExamResultsAsync(int examId, int instructorId)
+        {
+            // Validate exam exists and belongs to instructor
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+
+            if (exam == null || exam.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            if (exam.InstructorId != instructorId)
+            {
+                throw new UnauthorizedAccessException("You are not authorized to view results for this exam");
+            }
+
+            // Get all exam attempts (excluding soft-deleted)
+            var attempts = await _unitOfWork.ExamAttempts.FindAsync(
+                ea => ea.ExamId == examId && ea.DeletedAt == null);
+
+            // Get student IDs and fetch student info
+            var studentIds = attempts.Select(a => a.StudentId).Distinct().ToList();
+            var students = await _unitOfWork.Users.FindAsync(
+                u => studentIds.Contains(u.UserId) && u.DeletedAt == null);
+
+            var studentDict = students.ToDictionary(s => s.UserId, s => s.FullName);
+
+            // Map to result DTOs
+            var results = attempts.Select(attempt => new StudentExamResultDto
+            {
+                StudentId = attempt.StudentId,
+                StudentName = studentDict.ContainsKey(attempt.StudentId)
+                    ? studentDict[attempt.StudentId]
+                    : "Unknown",
+                FinalScore = attempt.FinalScore,
+                CheatingStatus = attempt.CheatingStatus ?? "clean",
+                TotalViolations = attempt.TotalViolations ?? 0
+            })
+            .OrderBy(r => r.StudentName)
+            .ToList();
+
+            return results;
+        }
+
+        
+
+
+        public async Task<List<InstructorExamDto>> GetInstructorExamsAsync(int instructorId)
+        {
+            // Validate instructor exists
+            var instructor = await _unitOfWork.Users.GetByIdAsync(instructorId);
+            if (instructor == null || instructor.Role.ToLower() != "instructor")
+            {
+                throw new UnauthorizedAccessException("Only instructors can view their exams");
+            }
+
+            // Get exams for instructor (excluding soft-deleted)
+            var exams = await _unitOfWork.Exams.FindAsync(
+                e => e.InstructorId == instructorId && e.DeletedAt == null);
+
+            // Return empty list if no exams found
+            if (exams == null || !exams.Any())
+            {
+                return new List<InstructorExamDto>();
+            }
+
+            var examDtos = exams.Select(e => new InstructorExamDto
+            {
+                ExamId = e.ExamId,
+                Title = e.Title,
+                Description = e.Description,
+                StartTime = e.StartTime,
+                EndTime = e.EndTime,
+                DurationMinutes = e.DurationMinutes,
+                ExamCode = e.ExamCode
+            }).OrderByDescending(e => e.StartTime).ToList();
+
+            return examDtos;
+        }
+
+
 
         // Helper methods
         private string GenerateExamCode()
