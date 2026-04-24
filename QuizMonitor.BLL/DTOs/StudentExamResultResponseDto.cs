@@ -8,5 +8,6 @@ namespace QuizMonitor.BLL.DTOs
         public decimal? FinalScore { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime? SubmitTime { get; set; }
+        public decimal ExamTotalPoints { get; set; }
     }
 }

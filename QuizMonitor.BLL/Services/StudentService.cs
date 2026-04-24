@@ -43,6 +43,14 @@ namespace QuizMonitor.BLL.Services
             var exams = await _unitOfWork.Exams.FindAsync(e => examIds.Contains(e.ExamId) && e.DeletedAt == null);
             var examDictionary = exams.ToDictionary(e => e.ExamId);
 
+            // Batch fetch questions and compute total points per exam.
+            var questions = await _unitOfWork.Questions.FindAsync(q =>
+                examIds.Contains(q.ExamId) &&
+                q.DeletedAt == null);
+            var examTotalPointsDictionary = questions
+                .GroupBy(q => q.ExamId)
+                .ToDictionary(g => g.Key, g => g.Sum(q => q.Points));
+
             var results = new List<StudentExamResultResponseDto>();
 
             foreach (var attempt in examAttempts)
@@ -52,7 +60,10 @@ namespace QuizMonitor.BLL.Services
                     var resultDto = new StudentExamResultResponseDto
                     {
                         ExamTitle = exam.Title,
-                        SubmitTime = attempt.SubmitTime
+                        SubmitTime = attempt.SubmitTime,
+                        ExamTotalPoints = examTotalPointsDictionary.TryGetValue(attempt.ExamId, out var totalPoints)
+                            ? totalPoints
+                            : 0m
                     };
 
                     if (string.Equals(attempt.Status, "graded", StringComparison.OrdinalIgnoreCase))
