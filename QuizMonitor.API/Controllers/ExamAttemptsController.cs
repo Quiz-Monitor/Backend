@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using QuizMonitor.BLL.DTOs;
 using QuizMonitor.BLL.Interfaces;
@@ -237,6 +238,11 @@ namespace QuizMonitor.API.Controllers
         /// </summary>
         [HttpGet("exam-attempts/{attemptId}/details")]
         [Authorize(Roles = "instructor")]
+        [ProducesResponseType(typeof(ExamAttemptDetailResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetExamAttemptDetails(int attemptId)
         {
             try

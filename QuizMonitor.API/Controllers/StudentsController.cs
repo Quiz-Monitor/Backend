@@ -2,8 +2,10 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using QuizMonitor.BLL.DTOs;
 using QuizMonitor.BLL.Interfaces;
 
 namespace QuizMonitor.API.Controllers
@@ -27,6 +29,10 @@ namespace QuizMonitor.API.Controllers
         /// Get authenticated student's exam results
         /// </summary>
         [HttpGet("me/results")]
+        [ProducesResponseType(typeof(List<StudentExamResultResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetMyExamResults()
         {
             try
