@@ -26,11 +26,12 @@ namespace QuizMonitor.BLL.Services
                 throw new UnauthorizedAccessException("Only students can access this endpoint");
             }
 
-            // Get all exam attempts for this student (only graded)
+            // get all exam attempt for this student with status SUBMITTED or GRADED
+            var validStatuses = new[] { "submitted", "graded" };
             var examAttempts = await _unitOfWork.ExamAttempts.FindAsync(ea =>
                 ea.StudentId == studentId &&
                 ea.DeletedAt == null &&
-                ea.IsGraded == true);
+                validStatuses.Contains(ea.Status));
 
             if (!examAttempts.Any())
             {
@@ -48,12 +49,24 @@ namespace QuizMonitor.BLL.Services
             {
                 if (examDictionary.TryGetValue(attempt.ExamId, out var exam))
                 {
-                    results.Add(new StudentExamResultResponseDto
+                    var resultDto = new StudentExamResultResponseDto
                     {
                         ExamTitle = exam.Title,
-                        FinalScore = attempt.FinalScore,
-                        CheatingStatus = attempt.CheatingStatus ?? "CLEAN"
-                    });
+                        SubmitTime = attempt.SubmitTime
+                    };
+
+                    if (string.Equals(attempt.Status, "graded", StringComparison.OrdinalIgnoreCase))
+                    {
+                        resultDto.Status = "Graded";
+                        resultDto.FinalScore = attempt.FinalScore;
+                    }
+                    else // SUBMITTED
+                    {
+                        resultDto.Status = "Pending";
+                        resultDto.FinalScore = null;
+                    }
+
+                    results.Add(resultDto);
                 }
             }
 
