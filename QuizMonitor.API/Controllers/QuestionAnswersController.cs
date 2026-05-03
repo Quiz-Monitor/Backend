@@ -28,7 +28,7 @@ namespace QuizMonitor.API.Controllers
         /// <param name="answerId">Answer ID</param>
         /// <param name="dto">Grading data (score and feedback)</param>
         /// <returns>Graded answer details and updated attempt scores</returns>
-        [HttpPost("/api/answers/{answerId}/grade")]
+        [HttpPost("{answerId}/grade")]
         [ProducesResponseType(typeof(GradeAnswerResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -1,9 +1,13 @@
+using System;
+
 namespace QuizMonitor.BLL.DTOs
 {
     public class StudentExamResultResponseDto
     {
         public string ExamTitle { get; set; } = string.Empty;
         public decimal? FinalScore { get; set; }
-        public string CheatingStatus { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? SubmitTime { get; set; }
+        public decimal ExamTotalPoints { get; set; }
     }
 }

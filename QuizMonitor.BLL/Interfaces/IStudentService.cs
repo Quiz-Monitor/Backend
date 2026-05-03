@@ -7,5 +7,6 @@ namespace QuizMonitor.BLL.Interfaces
     public interface IStudentService
     {
         Task<List<StudentExamResultResponseDto>> GetMyExamResultsAsync(int studentId);
+        Task<List<StudentExamResponseDto>> GetAvailableExamsForStudentAsync(int studentId);
     }
 }
