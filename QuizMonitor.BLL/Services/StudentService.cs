@@ -132,6 +132,7 @@ namespace QuizMonitor.BLL.Services
 
                 response.Add(new StudentExamResponseDto
                 {
+                    ExamId = exam.ExamId,
                     ExamTitle = exam.Title,
                     ExamCode = exam.ExamCode,
                     StartTime = exam.StartTime,

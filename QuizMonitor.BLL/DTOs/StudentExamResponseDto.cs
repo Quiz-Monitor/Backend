@@ -4,6 +4,7 @@ namespace QuizMonitor.BLL.DTOs
 {
     public class StudentExamResponseDto
     {
+        public int ExamId { get; set; } 
         public string ExamTitle { get; set; } = string.Empty;
         public string ExamCode { get; set; } = string.Empty;
         public DateTime? StartTime { get; set; }
