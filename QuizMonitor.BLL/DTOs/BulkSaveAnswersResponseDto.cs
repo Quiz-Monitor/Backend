@@ -12,5 +12,14 @@ namespace QuizMonitor.BLL.DTOs
 
         /// <summary>Per-answer result, in the same order as the request list</summary>
         public List<SaveAnswerResponseDto> Results { get; set; } = new();
+
+        /// <summary>
+        /// Exam submission result — included automatically because this endpoint
+        /// saves answers AND submits the exam in one call.
+        /// Check SubmitResult.GradingStatus:
+        ///   "auto_graded"            → all MCQ, FinalScore is ready now
+        ///   "pending_manual_grading" → has short-answer, instructor must grade first
+        /// </summary>
+        public SubmitExamResponseDto SubmitResult { get; set; } = new();
     }
 }

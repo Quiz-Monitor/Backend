@@ -234,8 +234,10 @@ namespace QuizMonitor.API.Controllers
         }
 
         /// <summary>
-        /// Get ALL questions (with choices) for an active attempt — no pagination.
-        /// Choices never expose the correct answer.
+        /// Start exam + get ALL questions in one call.
+        /// If attempt is "waiting" the exam is started (waiting → in_progress) before questions are returned.
+        /// If attempt is already "in_progress" questions are returned as-is (handles reconnection).
+        /// Choices never expose isCorrect to the student.
         /// </summary>
         [HttpGet("exam-attempts/{attemptId}/questions")]
         [Authorize(Roles = "student")]
@@ -272,7 +274,10 @@ namespace QuizMonitor.API.Controllers
         }
 
         /// <summary>
-        /// Save ALL answers in one request (upsert). Runs in a single DB transaction.
+        /// Save ALL answers + submit the exam in one call.
+        /// Answers are upserted in a single DB transaction, then the exam is submitted automatically.
+        /// Response includes per-answer scores AND the full submit result
+        /// (gradingStatus: "auto_graded" | "pending_manual_grading").
         /// </summary>
         [HttpPost("exam-attempts/{attemptId}/answers/bulk")]
         [Authorize(Roles = "student")]

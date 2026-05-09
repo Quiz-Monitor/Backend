@@ -105,6 +105,7 @@ namespace QuizMonitor.BLL.Services
 
             return new JoinExamResponseDto
             {
+                AttemptId = attempt.AttemptId,   // frontend uses this for GET questions
                 ExamId = exam.ExamId,
                 InstructorName = instructor?.FullName ?? "Unknown",
                 Title = exam.Title,
@@ -544,13 +545,33 @@ namespace QuizMonitor.BLL.Services
                 throw new InvalidOperationException("Exam attempt not found");
             if (attempt.StudentId != studentId)
                 throw new UnauthorizedAccessException("This attempt does not belong to you");
-            if (attempt.Status != "in_progress")
-                throw new InvalidOperationException("Exam attempt is not active");
 
-            // Load exam for the title
+            // Accept both "waiting" (first call → will start exam) and
+            // "in_progress" (subsequent calls → student reconnected, just return questions)
+            if (attempt.Status != "waiting" && attempt.Status != "in_progress")
+                throw new InvalidOperationException("Exam has already been submitted or graded");
+
+            // Load exam
             var exam = await _unitOfWork.Exams.GetByIdAsync(attempt.ExamId);
             if (exam == null || exam.DeletedAt != null)
                 throw new InvalidOperationException("Exam not found");
+
+            // ── START EXAM (only when still waiting) ──────────────────────────────
+            if (attempt.Status == "waiting")
+            {
+                var now = DateTime.UtcNow;
+
+                if (exam.StartTime.HasValue && exam.StartTime.Value > now)
+                    throw new InvalidOperationException("Exam has not started yet");
+                if (exam.EndTime.HasValue && exam.EndTime.Value < now)
+                    throw new InvalidOperationException("Exam has ended");
+
+                attempt.Status    = "in_progress";
+                attempt.StartTime = now;
+                _unitOfWork.ExamAttempts.Update(attempt);
+                await _unitOfWork.SaveChangesAsync();
+            }
+            // ─────────────────────────────────────────────────────────────────────
 
             // Load all non-deleted questions ordered by their position
             var questions = await _unitOfWork.Questions.FindAsync(
@@ -564,10 +585,13 @@ namespace QuizMonitor.BLL.Services
 
             return new ExamQuestionsResponseDto
             {
-                ExamId    = exam.ExamId,
-                ExamTitle = exam.Title,
+                AttemptId      = attempt.AttemptId,
+                ExamId         = exam.ExamId,
+                ExamTitle      = exam.Title,
+                StartedAt      = attempt.StartTime,
+                DurationMinutes = exam.DurationMinutes,
                 TotalQuestions = questionDtos.Count,
-                Questions = questionDtos
+                Questions      = questionDtos
             };
         }
 
@@ -690,11 +714,16 @@ namespace QuizMonitor.BLL.Services
                 })
                 .ToList();
 
+            // ── SUBMIT EXAM automatically after all answers are saved ──────────
+            var submitResult = await SubmitExamAsync(attemptId, studentId);
+            // ────────────────────────────────────────────────────────
+
             return new BulkSaveAnswersResponseDto
             {
                 TotalAnswered = results.Count,
                 TotalScore    = results.Sum(r => r.Score),
-                Results       = results
+                Results       = results,
+                SubmitResult  = submitResult
             };
         }
 

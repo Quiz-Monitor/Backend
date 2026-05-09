@@ -7,6 +7,8 @@ namespace QuizMonitor.BLL.DTOs
 {
     public class JoinExamResponseDto
     {
+        /// <summary>Use this to call GET /api/exam-attempts/{AttemptId}/questions</summary>
+        public int AttemptId { get; set; }
         public int ExamId {get; set;}
         public string InstructorName {get; set;} = string.Empty;
         public string Title {get; set;} = string.Empty;
