@@ -388,36 +388,63 @@ namespace QuizMonitor.BLL.Services
             var answers = await _unitOfWork.QuestionAnswers.FindAsync(qa =>
                 qa.AttemptId == attemptId && qa.DeletedAt == null);
 
+            // Sum all auto-graded (MCQ) scores from submitted answers
             var mcqScore = answers
-                .Where(a => a.Score.HasValue)
+                .Where(a => a.Score.HasValue && a.IsManuallyGraded != true)
                 .Sum(a => a.Score.Value);
 
-            // Update attempt
-            attempt.Status = "submitted";
+            // Check whether the exam contains any questions that require manual grading
+            var examQuestions = await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == attempt.ExamId && q.DeletedAt == null);
+
+            bool hasManualQuestions = examQuestions.Any(
+                q => !q.QuestionType.ToLower().StartsWith("mcq"));
+
+            // Set attempt fields
             attempt.SubmitTime = submitTime;
             attempt.TotalDurationSeconds = duration;
             attempt.McqScore = mcqScore;
-            attempt.FinalScore = mcqScore; // Will be updated after manual grading
+
+            if (hasManualQuestions)
+            {
+                // Pending: instructor must grade the open-ended questions
+                attempt.Status    = "submitted";
+                attempt.FinalScore = null; // calculated after manual grading completes
+            }
+            else
+            {
+                // All MCQ: auto-grade right now, student sees their score immediately
+                attempt.Status    = "graded";
+                attempt.FinalScore = mcqScore;
+                attempt.IsGraded  = true;
+                attempt.GradedAt  = submitTime;
+            }
 
             _unitOfWork.ExamAttempts.Update(attempt);
             await _unitOfWork.SaveChangesAsync();
 
             // Determine cheating status
+            // DB constraint: cheating_status IN ('clean', 'warning', 'flagged')  ← must be lowercase
             var totalViolations = attempt.TotalViolations ?? 0;
-            string cheatingStatus = "FLAGGED";
+            string cheatingStatus;
+            if (totalViolations == 0)      cheatingStatus = "clean";
+            else if (totalViolations <= 3) cheatingStatus = "warning";
+            else                           cheatingStatus = "flagged";
 
-            if (totalViolations == 0) cheatingStatus = "CLEAN";
-            else if (totalViolations <= 3) cheatingStatus = "WARNING";
-            else cheatingStatus = "FLAGGED";
+            // Persist cheating_status to the DB (was computed but never saved before)
+            attempt.CheatingStatus = cheatingStatus;
+            _unitOfWork.ExamAttempts.Update(attempt);
+            await _unitOfWork.SaveChangesAsync();
 
             return new SubmitExamResponseDto
             {
-                Status = "SUBMITTED",
-                McqScore = mcqScore,
-                ManualScore = attempt.ManualScore,
-                FinalScore = attempt.FinalScore ?? 0,
+                Status        = hasManualQuestions ? "SUBMITTED" : "GRADED",
+                GradingStatus = hasManualQuestions ? "pending_manual_grading" : "auto_graded",
+                McqScore      = mcqScore,
+                ManualScore   = attempt.ManualScore,
+                FinalScore    = attempt.FinalScore,   // null when pending, value when auto-graded
                 TotalViolations = totalViolations,
-                CheatingStatus = cheatingStatus
+                CheatingStatus = cheatingStatus.ToUpper()  // uppercase for API consumers
             };
         }
 
@@ -506,6 +533,168 @@ namespace QuizMonitor.BLL.Services
             {
                 Questions = questionDetailsList,
                 ViolationSummary = violationSummary
+            };
+        }
+
+        public async Task<ExamQuestionsResponseDto> GetAllQuestionsAsync(int attemptId, int studentId)
+        {
+            // Validate attempt
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            if (attempt == null || attempt.DeletedAt != null)
+                throw new InvalidOperationException("Exam attempt not found");
+            if (attempt.StudentId != studentId)
+                throw new UnauthorizedAccessException("This attempt does not belong to you");
+            if (attempt.Status != "in_progress")
+                throw new InvalidOperationException("Exam attempt is not active");
+
+            // Load exam for the title
+            var exam = await _unitOfWork.Exams.GetByIdAsync(attempt.ExamId);
+            if (exam == null || exam.DeletedAt != null)
+                throw new InvalidOperationException("Exam not found");
+
+            // Load all non-deleted questions ordered by their position
+            var questions = await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == attempt.ExamId && q.DeletedAt == null);
+
+            var questionDtos = new List<QuestionResponseDto>();
+            foreach (var question in questions.OrderBy(q => q.OrderNumber))
+            {
+                questionDtos.Add(await MapToQuestionResponseDto(question));
+            }
+
+            return new ExamQuestionsResponseDto
+            {
+                ExamId    = exam.ExamId,
+                ExamTitle = exam.Title,
+                TotalQuestions = questionDtos.Count,
+                Questions = questionDtos
+            };
+        }
+
+        public async Task<BulkSaveAnswersResponseDto> BulkSaveAnswersAsync(
+            int attemptId, int studentId, BulkSaveAnswersDto dto)
+        {
+            // Validate attempt
+            var attempt = await _unitOfWork.ExamAttempts.GetByIdAsync(attemptId);
+            if (attempt == null || attempt.DeletedAt != null)
+                throw new InvalidOperationException("Exam attempt not found");
+            if (attempt.StudentId != studentId)
+                throw new UnauthorizedAccessException("This attempt does not belong to you");
+            if (attempt.Status != "in_progress")
+                throw new InvalidOperationException("Exam attempt is not active");
+
+            if (dto.Answers == null || !dto.Answers.Any())
+                throw new InvalidOperationException("No answers provided");
+
+            // We collect entity references so we can read the DB-generated AnswerIds
+            // after the single SaveChanges call.
+            var entities  = new List<QuestionAnswer>();
+            var isCorrectList = new List<bool>();
+            var scoreList     = new List<decimal>();
+
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                foreach (var answerDto in dto.Answers)
+                {
+                    // Validate the question belongs to this exam
+                    var question = await _unitOfWork.Questions.GetByIdAsync(answerDto.QuestionId);
+                    if (question == null || question.DeletedAt != null || question.ExamId != attempt.ExamId)
+                        throw new InvalidOperationException(
+                            $"Question {answerDto.QuestionId} not found or does not belong to this exam");
+
+                    // Auto-score MCQ questions
+                    decimal score     = 0;
+                    bool   isCorrect  = false;
+
+                    if (question.QuestionType.ToLower().StartsWith("mcq"))
+                    {
+                        if (answerDto.SelectedChoices != null && answerDto.SelectedChoices.Any())
+                        {
+                            var choices = await _unitOfWork.Choices.FindAsync(
+                                c => c.QuestionId == question.QuestionId);
+
+                            var correctIds  = choices.Where(c => c.IsCorrect == true)
+                                                     .Select(c => c.ChoiceId)
+                                                     .OrderBy(x => x).ToList();
+                            var selectedIds = answerDto.SelectedChoices.OrderBy(x => x).ToList();
+
+                            isCorrect = selectedIds.SequenceEqual(correctIds);
+                            if (isCorrect) score = question.Points;
+                        }
+                    }
+
+                    bool isMcq = question.QuestionType.ToLower().StartsWith("mcq");
+
+                    // Upsert: update if already exists, create otherwise
+                    var existing = await _unitOfWork.QuestionAnswers.FirstOrDefaultAsync(
+                        qa => qa.AttemptId == attemptId
+                           && qa.QuestionId == answerDto.QuestionId
+                           && qa.DeletedAt  == null);
+
+                    if (existing != null)
+                    {
+                        existing.SelectedChoices = answerDto.SelectedChoices != null && answerDto.SelectedChoices.Any()
+                            ? JsonSerializer.Serialize(answerDto.SelectedChoices) : null;
+                        existing.AnswerText      = answerDto.AnswerText;
+                        existing.Score           = isMcq ? score     : (decimal?)null;
+                        existing.IsCorrect       = isMcq ? isCorrect : (bool?)null;
+                        existing.StartedAt       = answerDto.StartedAt;
+                        existing.AnsweredAt      = answerDto.AnsweredAt;
+                        existing.TimeSpentSeconds = answerDto.TimeSpentSeconds;
+
+                        _unitOfWork.QuestionAnswers.Update(existing);
+                        entities.Add(existing);
+                    }
+                    else
+                    {
+                        var newAnswer = new QuestionAnswer
+                        {
+                            AttemptId  = attemptId,
+                            QuestionId = answerDto.QuestionId,
+                            SelectedChoices = answerDto.SelectedChoices != null && answerDto.SelectedChoices.Any()
+                                ? JsonSerializer.Serialize(answerDto.SelectedChoices) : null,
+                            AnswerText       = answerDto.AnswerText,
+                            Score            = isMcq ? score     : (decimal?)null,
+                            IsCorrect        = isMcq ? isCorrect : (bool?)null,
+                            StartedAt        = answerDto.StartedAt,
+                            AnsweredAt       = answerDto.AnsweredAt,
+                            TimeSpentSeconds = answerDto.TimeSpentSeconds
+                        };
+
+                        await _unitOfWork.QuestionAnswers.AddAsync(newAnswer);
+                        entities.Add(newAnswer);
+                    }
+
+                    isCorrectList.Add(isCorrect);
+                    scoreList.Add(score);
+                }
+
+                // Single round-trip to the DB for all inserts / updates
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
+
+            // Build per-answer results (AnswerIds are populated by EF after SaveChanges)
+            var results = entities
+                .Select((entity, i) => new SaveAnswerResponseDto
+                {
+                    AnswerId  = entity.AnswerId,
+                    IsCorrect = isCorrectList[i],
+                    Score     = scoreList[i]
+                })
+                .ToList();
+
+            return new BulkSaveAnswersResponseDto
+            {
+                TotalAnswered = results.Count,
+                TotalScore    = results.Sum(r => r.Score),
+                Results       = results
             };
         }
 

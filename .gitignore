@@ -70,3 +70,11 @@ TestResults/
 
 # Backup files
 *.bak
+
+
+
+BulkEndpointsTest.http
+QuizMonitorAPI.http
+quizmonitor_test.sh
+NewWorkflowTest.http
+*.txt

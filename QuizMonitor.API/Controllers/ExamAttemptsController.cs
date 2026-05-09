@@ -234,6 +234,81 @@ namespace QuizMonitor.API.Controllers
         }
 
         /// <summary>
+        /// Get ALL questions (with choices) for an active attempt — no pagination.
+        /// Choices never expose the correct answer.
+        /// </summary>
+        [HttpGet("exam-attempts/{attemptId}/questions")]
+        [Authorize(Roles = "student")]
+        [ProducesResponseType(typeof(ExamQuestionsResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> GetAllQuestions(int attemptId)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var result = await _examAttemptService.GetAllQuestionsAsync(attemptId, studentId);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to get all questions: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized access to all questions: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving all questions");
+                return StatusCode(500, new { message = "An error occurred while retrieving questions" });
+            }
+        }
+
+        /// <summary>
+        /// Save ALL answers in one request (upsert). Runs in a single DB transaction.
+        /// </summary>
+        [HttpPost("exam-attempts/{attemptId}/answers/bulk")]
+        [Authorize(Roles = "student")]
+        [ProducesResponseType(typeof(BulkSaveAnswersResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> BulkSaveAnswers(int attemptId, [FromBody] BulkSaveAnswersDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                    return Unauthorized(new { message = "Invalid user token" });
+
+                var result = await _examAttemptService.BulkSaveAnswersAsync(attemptId, studentId, dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Failed to bulk save answers: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized bulk save answers: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error bulk saving answers");
+                return StatusCode(500, new { message = "An error occurred while saving answers" });
+            }
+        }
+
+        /// <summary>
         /// Get detailed report of a student's exam attempt (instructor only)
         /// </summary>
         [HttpGet("exam-attempts/{attemptId}/details")]

@@ -16,5 +16,11 @@ namespace QuizMonitor.BLL.Interfaces
         Task<SubmitExamResponseDto> SubmitExamAsync(int attemptId, int studentId);
         Task<ExamAttemptDetailResponseDto> GetExamAttemptDetailsAsync(int attemptId, int instructorId);
 
+        /// <summary>Returns all questions (with choices) for an active exam attempt — no pagination.</summary>
+        Task<ExamQuestionsResponseDto> GetAllQuestionsAsync(int attemptId, int studentId);
+
+        /// <summary>Saves (upsert) every answer in a single transaction.</summary>
+        Task<BulkSaveAnswersResponseDto> BulkSaveAnswersAsync(int attemptId, int studentId, BulkSaveAnswersDto dto);
+
     }
 }
