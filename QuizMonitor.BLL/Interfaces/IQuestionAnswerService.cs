@@ -1,4 +1,4 @@
-﻿using QuizMonitor.BLL.DTOs;
+using QuizMonitor.BLL.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,5 +12,9 @@ namespace QuizMonitor.BLL.Interfaces
 
         // Manual Grading
         Task<GradeAnswerResponseDto> GradeAnswerAsync(int answerId, int instructorId, GradeAnswerDto dto);
+
+        // Written Answers for Grading
+        Task<StudentWrittenAnswersResponseDto> GetWrittenAnswersAsync(int examId, int studentId, int instructorId);
+        Task<BatchGradeWrittenAnswersResponseDto> BatchGradeWrittenAnswersAsync(int examId, int studentId, int instructorId, BatchGradeWrittenAnswersDto dto);
     }
 }

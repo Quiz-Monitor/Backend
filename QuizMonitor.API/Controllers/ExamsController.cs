@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using QuizMonitor.BLL.DTOs;
 using QuizMonitor.BLL.Interfaces;
@@ -13,11 +14,13 @@ namespace QuizMonitor.API.Controllers;
 public class ExamsController : ControllerBase
 {
     private readonly IExamService _examService;
+    private readonly IQuestionAnswerService _questionAnswerService;
     private readonly ILogger<ExamsController> _logger;
 
-    public ExamsController(IExamService examService, ILogger<ExamsController> logger)
+    public ExamsController(IExamService examService, IQuestionAnswerService questionAnswerService, ILogger<ExamsController> logger)
     {
         _examService = examService;
+        _questionAnswerService = questionAnswerService;
         _logger = logger;
     }
 
@@ -310,6 +313,90 @@ public class ExamsController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving instructor exams");
             return StatusCode(500, new { message = "An error occurred while retrieving instructor exams" });
+        }
+    }
+
+    /// <summary>
+    /// Get all written (short-answer) questions and student answers for a specific student in a specific exam
+    /// </summary>
+    /// <param name="examId">Exam ID</param>
+    /// <param name="studentId">Student ID</param>
+    /// <returns>Written answers with grading summary</returns>
+    [HttpGet("{examId}/students/{studentId}/written-answers")]
+    [ProducesResponseType(typeof(StudentWrittenAnswersResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<StudentWrittenAnswersResponseDto>> GetWrittenAnswers(int examId, int studentId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var result = await _questionAnswerService.GetWrittenAnswersAsync(examId, studentId, instructorId);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized written answers access attempt");
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid written answers operation");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving written answers");
+            return StatusCode(500, new { message = "An error occurred while retrieving written answers" });
+        }
+    }
+
+    /// <summary>
+    /// Batch grade written (short-answer) questions for a specific student in a specific exam
+    /// </summary>
+    /// <param name="examId">Exam ID</param>
+    /// <param name="studentId">Student ID</param>
+    /// <param name="dto">Batch grading data</param>
+    /// <returns>Graded answers and updated attempt scores</returns>
+    [HttpPost("{examId}/students/{studentId}/written-answers/grade")]
+    [ProducesResponseType(typeof(BatchGradeWrittenAnswersResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<BatchGradeWrittenAnswersResponseDto>> BatchGradeWrittenAnswers(
+        int examId, int studentId, [FromBody] BatchGradeWrittenAnswersDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var result = await _questionAnswerService.BatchGradeWrittenAnswersAsync(examId, studentId, instructorId, dto);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized batch grading attempt");
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid batch grading operation");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error batch grading written answers");
+            return StatusCode(500, new { message = "An error occurred while grading written answers" });
         }
     }
 
