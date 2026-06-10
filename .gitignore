@@ -78,3 +78,5 @@ QuizMonitorAPI.http
 quizmonitor_test.sh
 NewWorkflowTest.http
 *.txt
+*.http
+*.sh

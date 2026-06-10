@@ -418,6 +418,98 @@ namespace QuizMonitor.BLL.Services
             return results;
         }
 
+        public async Task<SubmittedStudentsResponseDto> GetSubmittedStudentsAsync(int examId, int instructorId)
+        {
+            // 1. Validate exam exists and belongs to instructor
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+
+            if (exam == null || exam.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            if (exam.InstructorId != instructorId)
+            {
+                throw new UnauthorizedAccessException("You are not authorized to view submitted students for this exam");
+            }
+
+            // 2. Get all submitted or graded attempts (excluding soft-deleted)
+            var attempts = await _unitOfWork.ExamAttempts.FindAsync(
+                ea => ea.ExamId == examId
+                    && ea.DeletedAt == null
+                    && (ea.Status == "submitted" || ea.Status == "graded"));
+
+            // 3. Get student info
+            var studentIds = attempts.Select(a => a.StudentId).Distinct().ToList();
+            var students = await _unitOfWork.Users.FindAsync(
+                u => studentIds.Contains(u.UserId) && u.DeletedAt == null);
+            var studentDict = students.ToDictionary(s => s.UserId, s => s);
+
+            // 4. Get all questions for the exam to determine if written questions exist
+            var allQuestions = await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == examId && q.DeletedAt == null);
+
+            var writtenQuestionIds = allQuestions
+                .Where(q => !q.QuestionType.ToLower().StartsWith("mcq"))
+                .Select(q => q.QuestionId)
+                .ToHashSet();
+
+            bool examHasWrittenQuestions = writtenQuestionIds.Count > 0;
+
+            // 5. Build the student list
+            var studentDtos = new List<SubmittedStudentDto>();
+
+            foreach (var attempt in attempts)
+            {
+                var student = studentDict.ContainsKey(attempt.StudentId)
+                    ? studentDict[attempt.StudentId]
+                    : null;
+
+                // Check written answers grading status for this attempt
+                bool writtenAnswersGraded = false;
+                if (examHasWrittenQuestions)
+                {
+                    var attemptAnswers = await _unitOfWork.QuestionAnswers.FindAsync(
+                        qa => qa.AttemptId == attempt.AttemptId && qa.DeletedAt == null);
+
+                    var writtenAnswers = attemptAnswers
+                        .Where(a => writtenQuestionIds.Contains(a.QuestionId))
+                        .ToList();
+
+                    writtenAnswersGraded = writtenAnswers.Count > 0
+                        && writtenAnswers.All(a => a.IsManuallyGraded == true && a.Score.HasValue);
+                }
+
+                studentDtos.Add(new SubmittedStudentDto
+                {
+                    StudentId = attempt.StudentId,
+                    StudentName = student?.FullName ?? "Unknown",
+                    Email = student?.Email ?? "Unknown",
+                    AttemptId = attempt.AttemptId,
+                    AttemptStatus = attempt.Status ?? "unknown",
+                    SubmitTime = attempt.SubmitTime,
+                    McqScore = attempt.McqScore,
+                    ManualScore = attempt.ManualScore,
+                    FinalScore = attempt.FinalScore,
+                    TotalViolations = attempt.TotalViolations ?? 0,
+                    CheatingStatus = attempt.CheatingStatus ?? "clean",
+                    HasWrittenAnswers = examHasWrittenQuestions,
+                    WrittenAnswersGraded = writtenAnswersGraded
+                });
+            }
+
+            // 6. Order by student name and return
+            var orderedStudents = studentDtos.OrderBy(s => s.StudentName).ToList();
+
+            return new SubmittedStudentsResponseDto
+            {
+                ExamId = examId,
+                ExamTitle = exam.Title,
+                TotalSubmitted = orderedStudents.Count,
+                Students = orderedStudents
+            };
+        }
+
         
 
 

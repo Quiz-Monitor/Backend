@@ -16,6 +16,7 @@ namespace QuizMonitor.BLL.Interfaces
 
         // Exam Results
         Task<List<StudentExamResultDto>> GetExamResultsAsync(int examId, int instructorId);
+        Task<SubmittedStudentsResponseDto> GetSubmittedStudentsAsync(int examId, int instructorId);
 
         
         // Instructor Exams
