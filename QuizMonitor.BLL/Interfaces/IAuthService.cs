@@ -10,5 +10,10 @@ namespace QuizMonitor.BLL.Interfaces
         Task<AuthResponseDTO> LoginAsync(LoginDTO dto);
         Task<AuthResponseDTO> RefreshTokenAsync(string refreshToken);
         Task<User?> GetUserByIdAsync(int userId);
+        Task LogoutAsync(int userId);
+        Task DeleteAccountAsync(int userId, string password);
+        Task ChangePasswordAsync(int userId, ChangePasswordDTO dto);
+        Task<string?> ForgotPasswordAsync(string email);
+        Task ResetPasswordAsync(ResetPasswordDTO dto);
     }
 }

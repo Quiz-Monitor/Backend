@@ -109,6 +109,143 @@ namespace QuizMonitor.BLL.Services
                 .FirstOrDefaultAsync(u => u.UserId == userId && u.DeletedAt == null);
         }
 
+        public async Task LogoutAsync(int userId)
+        {
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.DeletedAt == null);
+
+            if (user == null)
+            {
+                throw new KeyNotFoundException("User not found");
+            }
+
+            // Invalidate refresh token
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task DeleteAccountAsync(int userId, string password)
+        {
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.DeletedAt == null);
+
+            if (user == null)
+            {
+                throw new KeyNotFoundException("User not found");
+            }
+
+            // Verify password
+            if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            {
+                throw new InvalidOperationException("Incorrect password");
+            }
+
+            // Soft delete
+            user.DeletedAt = DateTime.UtcNow;
+            user.DeletedBy = userId;
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task ChangePasswordAsync(int userId, ChangePasswordDTO dto)
+        {
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.DeletedAt == null);
+
+            if (user == null)
+            {
+                throw new KeyNotFoundException("User not found");
+            }
+
+            // Verify current password
+            if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            {
+                throw new InvalidOperationException("Current password is incorrect");
+            }
+
+            // Validate new password matches confirmation
+            if (dto.NewPassword != dto.ConfirmNewPassword)
+            {
+                throw new InvalidOperationException("New password and confirmation do not match");
+            }
+
+            // Validate new password is different from current
+            if (BCrypt.Net.BCrypt.Verify(dto.NewPassword, user.PasswordHash))
+            {
+                throw new InvalidOperationException("New password must be different from current password");
+            }
+
+            // Hash and update
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<string?> ForgotPasswordAsync(string email)
+        {
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.Email == email && u.DeletedAt == null);
+
+            if (user == null)
+            {
+                // Return null — caller will still return 200 to prevent email enumeration
+                return null;
+            }
+
+            // Generate 6-digit reset code
+            var random = new Random();
+            var resetCode = random.Next(100000, 999999).ToString();
+
+            // Store in RefreshToken fields with 15-minute expiry
+            user.RefreshToken = resetCode;
+            user.RefreshTokenExpiry = DateTime.UtcNow.AddMinutes(15);
+            user.UpdatedAt = DateTime.UtcNow;
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            return resetCode;
+        }
+
+        public async Task ResetPasswordAsync(ResetPasswordDTO dto)
+        {
+            var user = await _unitOfWork.Users
+                .FirstOrDefaultAsync(u => u.Email == dto.Email && u.DeletedAt == null);
+
+            if (user == null)
+            {
+                throw new InvalidOperationException("Invalid email or reset token");
+            }
+
+            // Verify reset token
+            if (user.RefreshToken != dto.ResetToken || user.RefreshTokenExpiry == null || user.RefreshTokenExpiry < DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Invalid or expired reset token");
+            }
+
+            // Validate passwords match
+            if (dto.NewPassword != dto.ConfirmNewPassword)
+            {
+                throw new InvalidOperationException("New password and confirmation do not match");
+            }
+
+            // Hash and update
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.RefreshToken = null;
+            user.RefreshTokenExpiry = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            _unitOfWork.Users.Update(user);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
         private async Task<AuthResponseDTO> GenerateTokensAsync(User user)
         {
             // Read JWT settings from configuration
