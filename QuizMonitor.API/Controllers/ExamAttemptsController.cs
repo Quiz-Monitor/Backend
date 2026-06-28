@@ -61,37 +61,37 @@ namespace QuizMonitor.API.Controllers
         /// <summary>
         /// Start exam attempt (transitions WAITING → ACTIVE)
         /// </summary>
-        [HttpPost("exam-attempts/start")]
-        [Authorize(Roles = "student")]
-        public async Task<IActionResult> StartExam([FromBody] StartExamDto dto)
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
-                {
-                    return Unauthorized(new { message = "Invalid user token" });
-                }
+        // [HttpPost("exam-attempts/start")]
+        // [Authorize(Roles = "student")]
+        // public async Task<IActionResult> StartExam([FromBody] StartExamDto dto)
+        // {
+        //     try
+        //     {
+        //         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        //         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+        //         {
+        //             return Unauthorized(new { message = "Invalid user token" });
+        //         }
 
-                var result = await _examAttemptService.StartExamAsync(studentId, dto);
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                _logger.LogWarning(ex, "Failed to start exam: {Message}", ex.Message);
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning(ex, "Unauthorized start exam attempt: {Message}", ex.Message);
-                return Forbid();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error starting exam");
-                return StatusCode(500, new { message = "An error occurred while starting the exam" });
-            }
-        }
+        //         var result = await _examAttemptService.StartExamAsync(studentId, dto);
+        //         return Ok(result);
+        //     }
+        //     catch (InvalidOperationException ex)
+        //     {
+        //         _logger.LogWarning(ex, "Failed to start exam: {Message}", ex.Message);
+        //         return BadRequest(new { message = ex.Message });
+        //     }
+        //     catch (UnauthorizedAccessException ex)
+        //     {
+        //         _logger.LogWarning(ex, "Unauthorized start exam attempt: {Message}", ex.Message);
+        //         return Forbid();
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _logger.LogError(ex, "Error starting exam");
+        //         return StatusCode(500, new { message = "An error occurred while starting the exam" });
+        //     }
+        // }
 
         /// <summary>
         /// Get question by order number
@@ -131,37 +131,37 @@ namespace QuizMonitor.API.Controllers
         /// <summary>
         /// Save answer (auto-save)
         /// </summary>
-        [HttpPost("exam-attempts/{attemptId}/answers")]
-        [Authorize(Roles = "student")]
-        public async Task<IActionResult> SaveAnswer(int attemptId, [FromBody] SaveAnswerDto dto)
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
-                {
-                    return Unauthorized(new { message = "Invalid user token" });
-                }
+        // [HttpPost("exam-attempts/{attemptId}/answers")]
+        // [Authorize(Roles = "student")]
+        // public async Task<IActionResult> SaveAnswer(int attemptId, [FromBody] SaveAnswerDto dto)
+        // {
+        //     try
+        //     {
+        //         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        //         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+        //         {
+        //             return Unauthorized(new { message = "Invalid user token" });
+        //         }
 
-                var result = await _examAttemptService.SaveAnswerAsync(attemptId, studentId, dto);
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                _logger.LogWarning(ex, "Failed to save answer: {Message}", ex.Message);
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning(ex, "Unauthorized save answer: {Message}", ex.Message);
-                return Forbid();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error saving answer");
-                return StatusCode(500, new { message = "An error occurred while saving the answer" });
-            }
-        }
+        //         var result = await _examAttemptService.SaveAnswerAsync(attemptId, studentId, dto);
+        //         return Ok(result);
+        //     }
+        //     catch (InvalidOperationException ex)
+        //     {
+        //         _logger.LogWarning(ex, "Failed to save answer: {Message}", ex.Message);
+        //         return BadRequest(new { message = ex.Message });
+        //     }
+        //     catch (UnauthorizedAccessException ex)
+        //     {
+        //         _logger.LogWarning(ex, "Unauthorized save answer: {Message}", ex.Message);
+        //         return Forbid();
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _logger.LogError(ex, "Error saving answer");
+        //         return StatusCode(500, new { message = "An error occurred while saving the answer" });
+        //     }
+        // }
 
         /// <summary>
         /// Log violation event
@@ -201,37 +201,37 @@ namespace QuizMonitor.API.Controllers
         /// <summary>
         /// Submit exam
         /// </summary>
-        [HttpPost("exam-attempts/{attemptId}/submit")]
-        [Authorize(Roles = "student")]
-        public async Task<IActionResult> SubmitExam(int attemptId)
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
-                {
-                    return Unauthorized(new { message = "Invalid user token" });
-                }
+        // [HttpPost("exam-attempts/{attemptId}/submit")]
+        // [Authorize(Roles = "student")]
+        // public async Task<IActionResult> SubmitExam(int attemptId)
+        // {
+        //     try
+        //     {
+        //         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        //         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+        //         {
+        //             return Unauthorized(new { message = "Invalid user token" });
+        //         }
 
-                var result = await _examAttemptService.SubmitExamAsync(attemptId, studentId);
-                return Ok(result);
-            }
-            catch (InvalidOperationException ex)
-            {
-                _logger.LogWarning(ex, "Failed to submit exam: {Message}", ex.Message);
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                _logger.LogWarning(ex, "Unauthorized submit exam: {Message}", ex.Message);
-                return Forbid();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error submitting exam");
-                return StatusCode(500, new { message = "An error occurred while submitting the exam" });
-            }
-        }
+        //         var result = await _examAttemptService.SubmitExamAsync(attemptId, studentId);
+        //         return Ok(result);
+        //     }
+        //     catch (InvalidOperationException ex)
+        //     {
+        //         _logger.LogWarning(ex, "Failed to submit exam: {Message}", ex.Message);
+        //         return BadRequest(new { message = ex.Message });
+        //     }
+        //     catch (UnauthorizedAccessException ex)
+        //     {
+        //         _logger.LogWarning(ex, "Unauthorized submit exam: {Message}", ex.Message);
+        //         return Forbid();
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _logger.LogError(ex, "Error submitting exam");
+        //         return StatusCode(500, new { message = "An error occurred while submitting the exam" });
+        //     }
+        // }
 
         /// <summary>
         /// Start exam + get ALL questions in one call.
