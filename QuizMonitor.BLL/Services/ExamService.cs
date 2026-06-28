@@ -510,7 +510,7 @@ namespace QuizMonitor.BLL.Services
             };
         }
 
-        
+
 
 
         public async Task<List<InstructorExamDto>> GetInstructorExamsAsync(int instructorId)
@@ -654,6 +654,308 @@ namespace QuizMonitor.BLL.Services
             await _unitOfWork.SaveChangesAsync();
 
             return MapToExamResponseDto(exam);
+        }
+
+        public async Task<FullEditExamResponseDto> FullEditExamAsync(int examId, int instructorId, FullEditExamDto dto)
+        {
+            // ── 1. Validate exam ────────────────────────────────────────────────
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+            if (exam == null || exam.DeletedAt != null)
+                throw new InvalidOperationException("Exam not found");
+            if (exam.InstructorId != instructorId)
+                throw new UnauthorizedAccessException("You are not authorized to edit this exam");
+            if (exam.IsPublished == true)
+                throw new InvalidOperationException("Cannot edit a published exam");
+
+            // ── 2. Validate questions upfront (before any DB write) ──────────────
+            var typeMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "mcq_single",   "mcq_single"  },
+                { "mcq_multiple", "mcq_multiple" },
+                { "true_false",   "open_ended"   },
+                { "short_answer", "open_ended"   },
+                { "essay",        "open_ended"   }
+            };
+
+            if (dto.Questions != null && dto.Questions.Any())
+            {
+                var dupOrders = dto.Questions
+                    .GroupBy(q => q.OrderNumber)
+                    .Where(g => g.Count() > 1)
+                    .Select(g => g.Key).ToList();
+                if (dupOrders.Any())
+                    throw new InvalidOperationException($"Duplicate question order numbers: {string.Join(", ", dupOrders)}");
+
+                foreach (var q in dto.Questions)
+                {
+                    if (!typeMapping.ContainsKey(q.QuestionType))
+                        throw new InvalidOperationException(
+                            $"Invalid question type '{q.QuestionType}'. Must be one of: {string.Join(", ", typeMapping.Keys)}");
+
+                    if (q.Choices != null && q.Choices.Any())
+                    {
+                        var dupChoiceOrders = q.Choices
+                            .GroupBy(c => c.OrderNumber)
+                            .Where(g => g.Count() > 1)
+                            .Select(g => g.Key).ToList();
+                        if (dupChoiceOrders.Any())
+                            throw new InvalidOperationException(
+                                $"Duplicate choice order numbers in question '{q.QuestionText}': {string.Join(", ", dupChoiceOrders)}");
+                    }
+                }
+            }
+
+            int added = 0, updated = 0, deleted = 0;
+            var now = DateTime.UtcNow;
+
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                // ── 3. Partial update exam metadata ────────────────────────────
+                if (dto.Title != null)                  exam.Title                   = dto.Title;
+                if (dto.Description != null)            exam.Description             = dto.Description;
+                if (dto.DurationMinutes.HasValue)       exam.DurationMinutes         = dto.DurationMinutes.Value;
+                if (dto.StartTime.HasValue)             exam.StartTime               = dto.StartTime.Value;
+                if (dto.EndTime.HasValue)               exam.EndTime                 = dto.EndTime.Value;
+                if (dto.CameraRequired.HasValue)        exam.CameraRequired          = dto.CameraRequired.Value;
+                if (dto.TabSwitchingDetection.HasValue) exam.TabSwitchingDetection   = dto.TabSwitchingDetection.Value;
+                if (dto.EyeTrackingEnabled.HasValue)    exam.EyeTrackingEnabled      = dto.EyeTrackingEnabled.Value;
+                if (dto.MultiplePersonDetection.HasValue) exam.MultiplePersonDetection = dto.MultiplePersonDetection.Value;
+                if (dto.MaxTabSwitches.HasValue)        exam.MaxTabSwitches          = dto.MaxTabSwitches.Value;
+                if (dto.MaxEyeAwaySeconds.HasValue)     exam.MaxEyeAwaySeconds       = dto.MaxEyeAwaySeconds.Value;
+                exam.UpdatedAt = now;
+                _unitOfWork.Exams.Update(exam);
+
+                // ── 4. Process questions ───────────────────────────────────────
+                if (dto.Questions != null)
+                {
+                    var existingQuestions = (await _unitOfWork.Questions.FindAsync(
+                        q => q.ExamId == examId && q.DeletedAt == null)).ToList();
+
+                    var requestedIds = dto.Questions
+                        .Where(q => q.QuestionId.HasValue)
+                        .Select(q => q.QuestionId!.Value)
+                        .ToHashSet();
+
+                    // Soft-delete questions not referenced in the request
+                    foreach (var eq in existingQuestions.Where(q => !requestedIds.Contains(q.QuestionId)))
+                    {
+                        eq.DeletedAt = now;
+                        _unitOfWork.Questions.Update(eq);
+                        deleted++;
+                    }
+
+                    // Collect new-question entities so we can add their choices after SaveChanges
+                    var newQueueItems = new List<(Question entity, List<ChoiceDto>? choices)>();
+
+                    foreach (var qDto in dto.Questions)
+                    {
+                        var normalizedType = typeMapping[qDto.QuestionType];
+
+                        if (qDto.QuestionId.HasValue)
+                        {
+                            // ── UPDATE existing question ───────────────────────
+                            var existing = existingQuestions.FirstOrDefault(q => q.QuestionId == qDto.QuestionId.Value);
+                            if (existing == null)
+                                throw new InvalidOperationException(
+                                    $"Question {qDto.QuestionId} not found in this exam");
+
+                            existing.QuestionType     = normalizedType;
+                            existing.QuestionText     = qDto.QuestionText;
+                            existing.QuestionImageUrl = qDto.QuestionImageUrl;
+                            existing.Points           = qDto.Points;
+                            existing.OrderNumber      = qDto.OrderNumber;
+                            existing.IsRequired       = qDto.IsRequired;
+                            _unitOfWork.Questions.Update(existing);
+
+                            // Update choices for existing question
+                            if (qDto.Choices != null)
+                            {
+                                var existingChoices = (await _unitOfWork.Choices.FindAsync(
+                                    c => c.QuestionId == existing.QuestionId)).ToList();
+
+                                var requestedChoiceIds = qDto.Choices
+                                    .Where(c => c.ChoiceId.HasValue)
+                                    .Select(c => c.ChoiceId!.Value)
+                                    .ToHashSet();
+
+                                // Remove choices not in request
+                                foreach (var ec in existingChoices.Where(c => !requestedChoiceIds.Contains(c.ChoiceId)))
+                                    _unitOfWork.Choices.Delete(ec);
+
+                                foreach (var cDto in qDto.Choices)
+                                {
+                                    if (cDto.ChoiceId.HasValue)
+                                    {
+                                        var ec = existingChoices.FirstOrDefault(c => c.ChoiceId == cDto.ChoiceId.Value);
+                                        if (ec != null)
+                                        {
+                                            ec.ChoiceText  = cDto.Text;
+                                            ec.IsCorrect   = cDto.IsCorrect;
+                                            ec.OrderNumber = cDto.OrderNumber;
+                                            _unitOfWork.Choices.Update(ec);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        await _unitOfWork.Choices.AddAsync(new Choice
+                                        {
+                                            QuestionId = existing.QuestionId,
+                                            ChoiceText = cDto.Text,
+                                            IsCorrect  = cDto.IsCorrect,
+                                            OrderNumber = cDto.OrderNumber
+                                        });
+                                    }
+                                }
+                            }
+
+                            updated++;
+                        }
+                        else
+                        {
+                            // ── CREATE new question (choices added after SaveChanges) ──
+                            var newQ = new Question
+                            {
+                                ExamId         = examId,
+                                QuestionType   = normalizedType,
+                                QuestionText   = qDto.QuestionText,
+                                QuestionImageUrl = qDto.QuestionImageUrl,
+                                Points         = qDto.Points,
+                                OrderNumber    = qDto.OrderNumber,
+                                IsRequired     = qDto.IsRequired,
+                                CreatedAt      = now
+                            };
+                            await _unitOfWork.Questions.AddAsync(newQ);
+                            newQueueItems.Add((newQ, qDto.Choices));
+                            added++;
+                        }
+                    }
+
+                    // First save: persists metadata + updates/deletes + new question shells
+                    await _unitOfWork.SaveChangesAsync();
+
+                    // Add choices for newly created questions (IDs are populated now)
+                    foreach (var (newQ, choices) in newQueueItems)
+                    {
+                        if (choices != null && choices.Any())
+                        {
+                            foreach (var cDto in choices)
+                            {
+                                await _unitOfWork.Choices.AddAsync(new Choice
+                                {
+                                    QuestionId  = newQ.QuestionId,
+                                    ChoiceText  = cDto.Text,
+                                    IsCorrect   = cDto.IsCorrect,
+                                    OrderNumber = cDto.OrderNumber
+                                });
+                            }
+                        }
+                    }
+
+                    if (newQueueItems.Any(x => x.choices != null && x.choices.Any()))
+                        await _unitOfWork.SaveChangesAsync();
+                }
+                else
+                {
+                    // Questions array omitted — only save exam metadata
+                    await _unitOfWork.SaveChangesAsync();
+                }
+
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
+
+            // ── 5. Build response (reload final state from DB) ─────────────────
+            var finalQuestions = (await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == examId && q.DeletedAt == null))
+                .OrderBy(q => q.OrderNumber)
+                .ToList();
+
+            var questionDtos = new List<QuestionResponseDto>();
+            foreach (var q in finalQuestions)
+            {
+                var choices = (await _unitOfWork.Choices.FindAsync(c => c.QuestionId == q.QuestionId))
+                    .OrderBy(c => c.OrderNumber)
+                    .Select(c => new ChoiceDto
+                    {
+                        ChoiceId    = c.ChoiceId,
+                        Text        = c.ChoiceText,
+                        IsCorrect   = c.IsCorrect ?? false,
+                        OrderNumber = c.OrderNumber
+                    }).ToList();
+
+                questionDtos.Add(new QuestionResponseDto
+                {
+                    QuestionId       = q.QuestionId,
+                    QuestionType     = q.QuestionType,
+                    QuestionText     = q.QuestionText,
+                    QuestionImageUrl = q.QuestionImageUrl,
+                    Points           = q.Points,
+                    OrderNumber      = q.OrderNumber,
+                    IsRequired       = q.IsRequired ?? true,
+                    CreatedAt        = q.CreatedAt,
+                    Choices          = choices.Any() ? choices : null
+                });
+            }
+
+            return new FullEditExamResponseDto
+            {
+                Exam      = MapToExamResponseDto(exam),
+                Questions = questionDtos,
+                Summary   = new FullEditSummaryDto
+                {
+                    QuestionsAdded   = added,
+                    QuestionsUpdated = updated,
+                    QuestionsDeleted = deleted,
+                    TotalQuestions   = finalQuestions.Count
+                }
+            };
+        }
+
+        public async Task<DeleteExamResponseDto> DeleteExamAsync(int examId, int instructorId)
+        {
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+            if (exam == null || exam.DeletedAt != null)
+                throw new InvalidOperationException("Exam not found");
+            if (exam.InstructorId != instructorId)
+                throw new UnauthorizedAccessException("You are not authorized to delete this exam");
+
+            // Guard: allow deletion only when not published, OR the exam has already ended
+            var now = DateTime.UtcNow;
+            if (exam.IsPublished == true && (!exam.EndTime.HasValue || exam.EndTime.Value > now))
+                throw new InvalidOperationException(
+                    "Cannot delete a published exam that has not ended yet");
+
+            // Soft-delete all non-deleted questions
+            var questions = (await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == examId && q.DeletedAt == null)).ToList();
+
+            foreach (var q in questions)
+            {
+                q.DeletedAt = now;
+                _unitOfWork.Questions.Update(q);
+            }
+
+            // Soft-delete the exam
+            exam.DeletedAt  = now;
+            exam.DeletedBy  = instructorId;
+            exam.UpdatedAt  = now;
+            _unitOfWork.Exams.Update(exam);
+
+            await _unitOfWork.SaveChangesAsync();
+
+            return new DeleteExamResponseDto
+            {
+                Message          = "Exam deleted successfully",
+                ExamId           = exam.ExamId,
+                ExamTitle        = exam.Title,
+                QuestionsDeleted = questions.Count,
+                DeletedAt        = now
+            };
         }
 
         // Helper methods

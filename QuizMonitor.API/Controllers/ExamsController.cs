@@ -238,6 +238,89 @@ public class ExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Full edit: update exam metadata + replace all questions in one transactional call.
+    /// Exam must NOT be published.
+    /// Questions with questionId are updated; without questionId are created;
+    /// existing questions absent from the array are soft-deleted.
+    /// </summary>
+    [HttpPut("{examId}/full")]
+    [ProducesResponseType(typeof(FullEditExamResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<FullEditExamResponseDto>> FullEditExam(int examId, [FromBody] FullEditExamDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var result = await _examService.FullEditExamAsync(examId, instructorId, dto);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized full-edit attempt on exam {ExamId}", examId);
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid full-edit operation on exam {ExamId}: {Message}", examId, ex.Message);
+            // 404 when exam not found, 400 for all other business-rule violations
+            return ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                ? NotFound(new { message = ex.Message })
+                : BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in full-edit exam {ExamId}", examId);
+            return StatusCode(500, new { message = "An error occurred while updating the exam" });
+        }
+    }
+
+    /// <summary>
+    /// Soft-delete an exam and all its questions.
+    /// Allowed when: exam is NOT published, OR exam has already ended.
+    /// </summary>
+    [HttpDelete("{examId}")]
+    [ProducesResponseType(typeof(DeleteExamResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DeleteExamResponseDto>> DeleteExam(int examId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+                return Unauthorized(new { message = "Invalid user token" });
+
+            var result = await _examService.DeleteExamAsync(examId, instructorId);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized delete attempt on exam {ExamId}", examId);
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid delete operation on exam {ExamId}: {Message}", examId, ex.Message);
+            return ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                ? NotFound(new { message = ex.Message })
+                : BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting exam {ExamId}", examId);
+            return StatusCode(500, new { message = "An error occurred while deleting the exam" });
+        }
+    }
+
+    /// <summary>
     /// Get exam results for all students
     /// </summary>
     /// <param name="examId">Exam ID</param>
@@ -316,7 +399,7 @@ public class ExamsController : ControllerBase
         }
     }
 
-   
+
 
     /// <summary>
     /// Get all exams for the instructor

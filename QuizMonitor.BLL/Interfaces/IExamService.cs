@@ -20,9 +20,21 @@ namespace QuizMonitor.BLL.Interfaces
         Task<List<StudentExamResultDto>> GetExamResultsAsync(int examId, int instructorId);
         Task<SubmittedStudentsResponseDto> GetSubmittedStudentsAsync(int examId, int instructorId);
 
-        
+
         // Instructor Exams
         Task<List<InstructorExamDto>> GetInstructorExamsAsync(int instructorId);
+
+        /// <summary>
+        /// Update exam metadata + replace all questions in one transactional call.
+        /// Exam must not be published.
+        /// </summary>
+        Task<FullEditExamResponseDto> FullEditExamAsync(int examId, int instructorId, FullEditExamDto dto);
+
+        /// <summary>
+        /// Soft-delete the exam and all its questions.
+        /// Allowed when: exam is not published, OR exam has already ended.
+        /// </summary>
+        Task<DeleteExamResponseDto> DeleteExamAsync(int examId, int instructorId);
 
     }
 }
