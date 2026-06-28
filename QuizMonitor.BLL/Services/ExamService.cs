@@ -548,6 +548,113 @@ namespace QuizMonitor.BLL.Services
 
 
 
+        public async Task<InstructorExamQuestionsResponseDto> GetExamQuestionsAsync(int examId, int instructorId)
+        {
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+
+            if (exam == null || exam.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            if (exam.InstructorId != instructorId)
+            {
+                throw new UnauthorizedAccessException("You are not authorized to view this exam's questions");
+            }
+
+            // Get all non-deleted questions for this exam, ordered by OrderNumber
+            var questions = await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == examId && q.DeletedAt == null);
+
+            var orderedQuestions = questions.OrderBy(q => q.OrderNumber).ToList();
+
+            // Build response with choices for each question
+            var questionDtos = new List<QuestionResponseDto>();
+            foreach (var question in orderedQuestions)
+            {
+                var choices = await _unitOfWork.Choices.FindAsync(c => c.QuestionId == question.QuestionId);
+
+                questionDtos.Add(new QuestionResponseDto
+                {
+                    QuestionId = question.QuestionId,
+                    QuestionType = question.QuestionType,
+                    QuestionText = question.QuestionText,
+                    QuestionImageUrl = question.QuestionImageUrl,
+                    Points = question.Points,
+                    OrderNumber = question.OrderNumber,
+                    IsRequired = question.IsRequired ?? true,
+                    CreatedAt = question.CreatedAt,
+                    Choices = choices.Select(c => new ChoiceDto
+                    {
+                        ChoiceId = c.ChoiceId,
+                        Text = c.ChoiceText,
+                        IsCorrect = c.IsCorrect ?? false,
+                        OrderNumber = c.OrderNumber
+                    }).OrderBy(c => c.OrderNumber).ToList()
+                });
+            }
+
+            return new InstructorExamQuestionsResponseDto
+            {
+                ExamId = exam.ExamId,
+                ExamTitle = exam.Title,
+                IsPublished = exam.IsPublished ?? false,
+                TotalQuestions = questionDtos.Count,
+                Questions = questionDtos
+            };
+        }
+
+        public async Task<ExamResponseDto> UpdateExamAsync(int examId, int instructorId, UpdateExamDto dto)
+        {
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+
+            if (exam == null || exam.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            if (exam.InstructorId != instructorId)
+            {
+                throw new UnauthorizedAccessException("You are not authorized to edit this exam");
+            }
+
+            if (exam.IsPublished == true)
+            {
+                throw new InvalidOperationException("Cannot edit a published exam");
+            }
+
+            // Apply only non-null fields (partial update)
+            if (dto.Title != null)
+                exam.Title = dto.Title;
+            if (dto.Description != null)
+                exam.Description = dto.Description;
+            if (dto.DurationMinutes.HasValue)
+                exam.DurationMinutes = dto.DurationMinutes.Value;
+            if (dto.StartTime.HasValue)
+                exam.StartTime = dto.StartTime.Value;
+            if (dto.EndTime.HasValue)
+                exam.EndTime = dto.EndTime.Value;
+            if (dto.CameraRequired.HasValue)
+                exam.CameraRequired = dto.CameraRequired.Value;
+            if (dto.TabSwitchingDetection.HasValue)
+                exam.TabSwitchingDetection = dto.TabSwitchingDetection.Value;
+            if (dto.EyeTrackingEnabled.HasValue)
+                exam.EyeTrackingEnabled = dto.EyeTrackingEnabled.Value;
+            if (dto.MultiplePersonDetection.HasValue)
+                exam.MultiplePersonDetection = dto.MultiplePersonDetection.Value;
+            if (dto.MaxTabSwitches.HasValue)
+                exam.MaxTabSwitches = dto.MaxTabSwitches.Value;
+            if (dto.MaxEyeAwaySeconds.HasValue)
+                exam.MaxEyeAwaySeconds = dto.MaxEyeAwaySeconds.Value;
+
+            exam.UpdatedAt = DateTime.UtcNow;
+
+            _unitOfWork.Exams.Update(exam);
+            await _unitOfWork.SaveChangesAsync();
+
+            return MapToExamResponseDto(exam);
+        }
+
         // Helper methods
         private string GenerateExamCode()
         {

@@ -76,9 +76,117 @@
 
 ---
 
-# 2- Exam Management (Instructor) (~ 5)
+# 2- Exam Management (Instructor) (~ 7)
+
+##  Get Exam Questions (for Editing)
+
+`GET /api/exams/{examId}/questions`
+
+**Server-side rules**
+
+* Exam must exist and not be deleted
+* Instructor must be the exam owner
+* Returns all non-deleted questions with their choices (including `isCorrect`)
+
+**Response**
+
+```json
+{
+  "examId": 5,
+  "examTitle": "Data Structures Quiz",
+  "isPublished": false,
+  "totalQuestions": 2,
+  "questions": [
+    {
+      "questionId": 20,
+      "questionType": "mcq_single",
+      "questionText": "What is the time complexity of binary search?",
+      "questionImageUrl": null,
+      "points": 5,
+      "orderNumber": 1,
+      "isRequired": true,
+      "createdAt": "2025-01-10T14:30:00Z",
+      "updatedAt": null,
+      "choices": [
+        { "choiceId": 1, "text": "O(n)", "isCorrect": false, "orderNumber": 1 },
+        { "choiceId": 2, "text": "O(log n)", "isCorrect": true, "orderNumber": 2 },
+        { "choiceId": 3, "text": "O(n log n)", "isCorrect": false, "orderNumber": 3 }
+      ]
+    },
+    {
+      "questionId": 21,
+      "questionType": "open_ended",
+      "questionText": "Explain the difference between a stack and a queue.",
+      "questionImageUrl": null,
+      "points": 10,
+      "orderNumber": 2,
+      "isRequired": true,
+      "createdAt": "2025-01-10T14:35:00Z",
+      "updatedAt": null,
+      "choices": []
+    }
+  ]
+}
+```
+
+---
+
+##  Edit Exam Info
+
+`PUT /api/exams/{examId}`
+
+**Server-side rules**
+
+* Exam must exist and not be deleted
+* Instructor must be the exam owner
+* **Cannot edit a published exam** (returns 400)
+* All fields are optional — only provided fields are updated (partial update)
+
+**Request**
+
+```json
+{
+  "title": "Data Structures Midterm Quiz",
+  "description": "Updated midterm quiz description",
+  "durationMinutes": 90,
+  "startTime": "2025-02-01T10:00:00Z",
+  "endTime": "2025-02-01T11:30:00Z",
+  "cameraRequired": true,
+  "tabSwitchingDetection": true,
+  "eyeTrackingEnabled": false,
+  "multiplePersonDetection": true,
+  "maxTabSwitches": 3,
+  "maxEyeAwaySeconds": 20
+}
+```
+
+**Response**
+
+```json
+{
+  "examId": 5,
+  "examCode": "AB12CD",
+  "isPublished": false,
+  "title": "Data Structures Midterm Quiz",
+  "description": "Updated midterm quiz description",
+  "durationMinutes": 90,
+  "startTime": "2025-02-01T10:00:00Z",
+  "endTime": "2025-02-01T11:30:00Z",
+  "cameraRequired": true,
+  "tabSwitchingDetection": true,
+  "eyeTrackingEnabled": false,
+  "multiplePersonDetection": true,
+  "maxTabSwitches": 3,
+  "maxEyeAwaySeconds": 20,
+  "createdAt": "2025-01-10T12:30:00Z",
+  "updatedAt": "2025-01-11T09:00:00Z"
+}
+```
+
+---
 
 ##  Create Exam
+
 
 `POST /api/exams`
 

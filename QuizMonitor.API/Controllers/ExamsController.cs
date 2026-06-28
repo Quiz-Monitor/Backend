@@ -440,4 +440,86 @@ public class ExamsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Get all questions for an exam (instructor view for editing)
+    /// </summary>
+    /// <param name="examId">Exam ID</param>
+    /// <returns>List of questions with choices including correct answers</returns>
+    [HttpGet("{examId}/questions")]
+    [ProducesResponseType(typeof(InstructorExamQuestionsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<InstructorExamQuestionsResponseDto>> GetExamQuestions(int examId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var result = await _examService.GetExamQuestionsAsync(examId, instructorId);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized exam questions access attempt");
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid exam questions operation");
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving exam questions");
+            return StatusCode(500, new { message = "An error occurred while retrieving exam questions" });
+        }
+    }
+
+    /// <summary>
+    /// Update exam info (title, description, timing, proctoring settings)
+    /// </summary>
+    /// <param name="examId">Exam ID</param>
+    /// <param name="dto">Updated exam data (partial update - only provided fields are updated)</param>
+    /// <returns>Updated exam details</returns>
+    [HttpPut("{examId}")]
+    [ProducesResponseType(typeof(ExamResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ExamResponseDto>> UpdateExam(int examId, [FromBody] UpdateExamDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var response = await _examService.UpdateExamAsync(examId, instructorId, dto);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized exam update attempt");
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid exam update operation");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating exam");
+            return StatusCode(500, new { message = "An error occurred while updating the exam" });
+        }
+    }
+
 }
