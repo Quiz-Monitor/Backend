@@ -540,7 +540,8 @@ namespace QuizMonitor.BLL.Services
                 StartTime = e.StartTime,
                 EndTime = e.EndTime,
                 DurationMinutes = e.DurationMinutes,
-                ExamCode = e.ExamCode
+                ExamCode = e.ExamCode,
+                IsPublished = e.IsPublished
             }).OrderByDescending(e => e.StartTime).ToList();
 
             return examDtos;

@@ -11,5 +11,6 @@ namespace QuizMonitor.BLL.DTOs
         public DateTime? EndTime { get; set; }
         public int DurationMinutes { get; set; }
         public string ExamCode { get; set; } = string.Empty;
+        public bool? IsPublished {get; set;}
     }
 }
