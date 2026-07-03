@@ -42,6 +42,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IExamAttemptService, ExamAttemptService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IInstructorService, InstructorService>();
 builder.Services.AddScoped<IQuestionAnswerService, QuestionAnswerService>();
 
 // Add controllers

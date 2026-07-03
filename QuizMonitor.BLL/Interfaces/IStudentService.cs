@@ -8,5 +8,7 @@ namespace QuizMonitor.BLL.Interfaces
     {
         Task<List<StudentExamResultResponseDto>> GetMyExamResultsAsync(int studentId);
         Task<List<StudentExamResponseDto>> GetAvailableExamsForStudentAsync(int studentId);
+        Task<StudentSubmittedExamsResponseDto> GetSubmittedExamsAsync(int studentId);
+        Task<StudentStatisticsResponseDto> GetStudentStatisticsAsync(int studentId);
     }
 }
