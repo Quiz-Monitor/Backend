@@ -35,6 +35,12 @@ public partial class ExamAttempt
 
     public int? MultiplePersonCount { get; set; }
 
+    public int? FaceMissingCount { get; set; }
+
+    public int? LowVisibilityCount { get; set; }
+
+    public int? SuspiciousObjectCount { get; set; }
+
     public string? InstructorNotes { get; set; }
 
     public bool? IsGraded { get; set; }

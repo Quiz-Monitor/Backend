@@ -316,8 +316,8 @@ namespace QuizMonitor.BLL.Services
             if (attempt.StudentId != studentId) throw new UnauthorizedAccessException("This attempt does not belong to you");
             if (attempt.Status != "in_progress") throw new InvalidOperationException("Exam attempt is not active");
 
-            // Normalize violation type to lowercase for database
-            var normalizedViolationType = dto.ViolationType.ToLower().Replace("_", "_");
+            // Store the violation type exactly as the AI model sends it (no mapping)
+            var normalizedViolationType = dto.ViolationType.ToLower();
 
             // create violation event
             var violation = new ViolationEvent
@@ -337,19 +337,33 @@ namespace QuizMonitor.BLL.Services
             // update attempt violation counters
             attempt.TotalViolations = (attempt.TotalViolations ?? 0) + 1;
 
+            // Each AI-model event type gets its own dedicated counter.
+            // Legacy aliases (eye_away, multiple_person) are kept for backward compatibility
+            // with any older frontend/AI payloads still using the singular/old names.
             switch (normalizedViolationType)
             {
                 case "tab_switch":
                     attempt.TabSwitchCount = (attempt.TabSwitchCount ?? 0) + 1;
                     break;
-                case "eye_away":
+                case "gaze_away":
+                case "eye_away":          // legacy alias
                     attempt.EyeAwayCount = (attempt.EyeAwayCount ?? 0) + 1;
                     break;
-                case "multiple_person":
+                case "multiple_persons":
+                case "multiple_person":   // legacy alias
                     attempt.MultiplePersonCount = (attempt.MultiplePersonCount ?? 0) + 1;
                     break;
                 case "object_detected":
                     attempt.ObjectDetectedCount = (attempt.ObjectDetectedCount ?? 0) + 1;
+                    break;
+                case "face_missing":
+                    attempt.FaceMissingCount = (attempt.FaceMissingCount ?? 0) + 1;
+                    break;
+                case "low_visibility":
+                    attempt.LowVisibilityCount = (attempt.LowVisibilityCount ?? 0) + 1;
+                    break;
+                case "suspicious_object":
+                    attempt.SuspiciousObjectCount = (attempt.SuspiciousObjectCount ?? 0) + 1;
                     break;
             }
 
@@ -525,9 +539,13 @@ namespace QuizMonitor.BLL.Services
             // Build violation summary from attempt counters
             var violationSummary = new ViolationSummaryDto
             {
-                TabSwitch = attempt.TabSwitchCount ?? 0,
-                EyeAway = attempt.EyeAwayCount ?? 0,
-                MultiplePersons = attempt.MultiplePersonCount ?? 0
+                TabSwitch        = attempt.TabSwitchCount ?? 0,
+                EyeAway          = attempt.EyeAwayCount ?? 0,
+                MultiplePersons  = attempt.MultiplePersonCount ?? 0,
+                ObjectDetected   = attempt.ObjectDetectedCount ?? 0,
+                FaceMissing      = attempt.FaceMissingCount ?? 0,
+                LowVisibility    = attempt.LowVisibilityCount ?? 0,
+                SuspiciousObject = attempt.SuspiciousObjectCount ?? 0
             };
 
             return new ExamAttemptDetailResponseDto

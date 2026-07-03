@@ -242,6 +242,15 @@ public partial class QuizMonitorDbContext : DbContext
             entity.Property(e => e.ObjectDetectedCount)
                 .HasDefaultValue(0)
                 .HasColumnName("object_detected_count");
+            entity.Property(e => e.FaceMissingCount)
+                .HasDefaultValue(0)
+                .HasColumnName("face_missing_count");
+            entity.Property(e => e.LowVisibilityCount)
+                .HasDefaultValue(0)
+                .HasColumnName("low_visibility_count");
+            entity.Property(e => e.SuspiciousObjectCount)
+                .HasDefaultValue(0)
+                .HasColumnName("suspicious_object_count");
             entity.Property(e => e.StartTime)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnType("timestamp without time zone")
