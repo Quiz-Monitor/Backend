@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -154,6 +155,50 @@ namespace QuizMonitor.API.Controllers
             {
                 _logger.LogError(ex, "Error getting student statistics");
                 return StatusCode(500, new { message = "An error occurred while retrieving student statistics" });
+            }
+        }
+
+        /// <summary>
+        /// Review a graded exam — see your answers alongside the correct answers.
+        /// Only available once the attempt status is "graded".
+        /// </summary>
+        [HttpGet("me/exams/{examId}/review")]
+        [ProducesResponseType(typeof(StudentExamReviewDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ReviewExam(int examId)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int studentId))
+                {
+                    return Unauthorized(new { message = "Invalid user token" });
+                }
+
+                var review = await _studentService.GetExamReviewAsync(examId, studentId);
+                return Ok(review);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized access to exam review: {Message}", ex.Message);
+                return Forbid();
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Invalid exam review request: {Message}", ex.Message);
+                return ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("not joined", StringComparison.OrdinalIgnoreCase)
+                    ? NotFound(new { message = ex.Message })
+                    : BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting exam review");
+                return StatusCode(500, new { message = "An error occurred while retrieving the exam review" });
             }
         }
     }

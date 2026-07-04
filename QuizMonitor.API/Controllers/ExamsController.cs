@@ -440,6 +440,39 @@ public class ExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Recent exams dashboard: exam name, student count, and (once the exam is over)
+    /// completion percentage and flag count.
+    /// </summary>
+    [HttpGet("instructor/recent")]
+    [ProducesResponseType(typeof(List<InstructorRecentExamDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<List<InstructorRecentExamDto>>> GetInstructorRecentExams()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int instructorId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var exams = await _examService.GetInstructorRecentExamsAsync(instructorId);
+            return Ok(exams);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized recent exams access attempt");
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving instructor recent exams");
+            return StatusCode(500, new { message = "An error occurred while retrieving recent exams" });
+        }
+    }
+
+    /// <summary>
     /// Get all written (short-answer) questions and student answers for a specific student in a specific exam
     /// </summary>
     /// <param name="examId">Exam ID</param>
