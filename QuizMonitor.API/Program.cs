@@ -8,7 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using QuizMonitor.DAL.Interfaces;
 using QuizMonitor.DAL.Repositories;
-
+using QuizMonitor.BLL.Hubs;
+using Hangfire;
+using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Mvc.ApplicationParts;
 // Enable legacy timestamp behavior for PostgreSQL
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
@@ -26,6 +29,9 @@ else
 
 var builder = WebApplication.CreateBuilder(args);
 
+// add signalR 
+builder.Services.AddSignalR();
+
 // Add DbContext with PostgreSQL
 // Read from environment variable directly since we loaded it with DotNetEnv
 var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
@@ -33,6 +39,13 @@ Console.WriteLine($"Connection string loaded: {!string.IsNullOrEmpty(connectionS
 
 builder.Services.AddDbContext<QuizMonitorDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+
+// add hangfire
+builder.Services.AddHangfire(config =>
+    config.UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
+
+builder.Services.AddHangfireServer();
 
 // Register repositories and Unit of Work
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -44,6 +57,7 @@ builder.Services.AddScoped<IExamAttemptService, ExamAttemptService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IInstructorService, InstructorService>();
 builder.Services.AddScoped<IQuestionAnswerService, QuestionAnswerService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // Add controllers
 builder.Services.AddControllers();
@@ -169,7 +183,14 @@ app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard();
+}
+
 app.MapControllers();
+
+app.MapHub<NotificationHub>("/Notification");
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
