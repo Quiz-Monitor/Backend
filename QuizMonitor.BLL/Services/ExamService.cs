@@ -391,8 +391,8 @@ namespace QuizMonitor.BLL.Services
             }
 
             // Get all exam attempts (excluding soft-deleted)
-            var attempts = await _unitOfWork.ExamAttempts.FindAsync(
-                ea => ea.ExamId == examId && ea.DeletedAt == null);
+            var attempts = (await _unitOfWork.ExamAttempts.FindAsync(
+                ea => ea.ExamId == examId && ea.DeletedAt == null)).ToList();
 
             // Get student IDs and fetch student info
             var studentIds = attempts.Select(a => a.StudentId).Distinct().ToList();
@@ -401,16 +401,54 @@ namespace QuizMonitor.BLL.Services
 
             var studentDict = students.ToDictionary(s => s.UserId, s => s.FullName);
 
+            // Fetch individual violation events for these attempts, excluding object_detected
+            var attemptIds = attempts.Select(a => a.AttemptId).ToList();
+            var violations = (await _unitOfWork.ViolationEvents.FindAsync(
+                v => attemptIds.Contains(v.AttemptId)
+                     && v.DeletedAt == null
+                     && v.ViolationType != "object_detected"))
+                .OrderBy(v => v.Timestamp)
+                .ToList();
+
+            var violationsByAttempt = violations
+                .GroupBy(v => v.AttemptId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             // Map to result DTOs
-            var results = attempts.Select(attempt => new StudentExamResultDto
+            var results = attempts.Select(attempt =>
             {
-                StudentId = attempt.StudentId,
-                StudentName = studentDict.ContainsKey(attempt.StudentId)
-                    ? studentDict[attempt.StudentId]
-                    : "Unknown",
-                FinalScore = attempt.FinalScore,
-                CheatingStatus = attempt.CheatingStatus ?? "clean",
-                TotalViolations = attempt.TotalViolations ?? 0
+                violationsByAttempt.TryGetValue(attempt.AttemptId, out var attemptViolations);
+                attemptViolations ??= new List<DAL.Models.ViolationEvent>();
+
+                // Exclude object_detected from the total violation count
+                var objectDetected = attempt.ObjectDetectedCount ?? 0;
+                var recalculatedTotal = Math.Max(0, (attempt.TotalViolations ?? 0) - objectDetected);
+
+                return new StudentExamResultDto
+                {
+                    StudentId = attempt.StudentId,
+                    StudentName = studentDict.ContainsKey(attempt.StudentId)
+                        ? studentDict[attempt.StudentId]
+                        : "Unknown",
+                    FinalScore = attempt.FinalScore,
+                    CheatingStatus = attempt.CheatingStatus ?? "clean",
+                    TotalViolations = recalculatedTotal,
+                    TabSwitchCount = attempt.TabSwitchCount ?? 0,
+                    EyeAwayCount = attempt.EyeAwayCount ?? 0,
+                    MultiplePersonCount = attempt.MultiplePersonCount ?? 0,
+                    FaceMissingCount = attempt.FaceMissingCount ?? 0,
+                    LowVisibilityCount = attempt.LowVisibilityCount ?? 0,
+                    SuspiciousObjectCount = attempt.SuspiciousObjectCount ?? 0,
+                    Violations = attemptViolations.Select(v => new ViolationDetailDto
+                    {
+                        ViolationId = v.ViolationId,
+                        ViolationType = v.ViolationType,
+                        Timestamp = v.Timestamp,
+                        Description = v.Description,
+                        DurationSeconds = v.DurationSeconds,
+                        ScreenshotUrl = v.ScreenshotUrl
+                    }).ToList()
+                };
             })
             .OrderBy(r => r.StudentName)
             .ToList();
@@ -956,6 +994,67 @@ namespace QuizMonitor.BLL.Services
                 QuestionsDeleted = questions.Count,
                 DeletedAt        = now
             };
+        }
+
+        public async Task<List<InstructorRecentExamDto>> GetInstructorRecentExamsAsync(int instructorId)
+        {
+            var instructor = await _unitOfWork.Users.GetByIdAsync(instructorId);
+            if (instructor == null || instructor.Role.ToLower() != "instructor")
+                throw new UnauthorizedAccessException("Only instructors can view their exams");
+
+            var exams = (await _unitOfWork.Exams.FindAsync(
+                e => e.InstructorId == instructorId && e.DeletedAt == null)).ToList();
+
+            if (!exams.Any())
+                return new List<InstructorRecentExamDto>();
+
+            // Batch fetch every attempt for these exams to avoid N+1 queries
+            var examIds = exams.Select(e => e.ExamId).ToList();
+            var allAttempts = (await _unitOfWork.ExamAttempts.FindAsync(
+                a => examIds.Contains(a.ExamId) && a.DeletedAt == null)).ToList();
+
+            var attemptsByExam = allAttempts
+                .GroupBy(a => a.ExamId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var now = DateTime.UtcNow;
+            var result = new List<InstructorRecentExamDto>();
+
+            foreach (var exam in exams)
+            {
+                attemptsByExam.TryGetValue(exam.ExamId, out var attempts);
+                attempts ??= new List<ExamAttempt>();
+
+                bool isOver = exam.EndTime.HasValue && exam.EndTime.Value <= now;
+
+                double? completionPercent = null;
+                int? numberOfFlags = null;
+
+                if (isOver)
+                {
+                    var totalAttempts = attempts.Count;
+                    var completedAttempts = attempts.Count(a =>
+                        a.Status == "submitted" || a.Status == "graded");
+
+                    completionPercent = totalAttempts > 0
+                        ? Math.Round((double)completedAttempts / totalAttempts * 100, 1)
+                        : 0.0;
+
+                    numberOfFlags = attempts.Sum(a => a.TotalViolations ?? 0);
+                }
+
+                result.Add(new InstructorRecentExamDto
+                {
+                    ExamId = exam.ExamId,
+                    ExamName = exam.Title,
+                    NumberOfStudents = attempts.Count,
+                    ScheduledAt = exam.StartTime,
+                    CompletionPercent = completionPercent,
+                    NumberOfFlags = numberOfFlags
+                });
+            }
+
+            return result.OrderByDescending(e => e.ScheduledAt).ToList();
         }
 
         // Helper methods

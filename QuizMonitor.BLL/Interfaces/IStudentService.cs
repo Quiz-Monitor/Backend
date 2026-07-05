@@ -10,5 +10,11 @@ namespace QuizMonitor.BLL.Interfaces
         Task<List<StudentExamResponseDto>> GetAvailableExamsForStudentAsync(int studentId);
         Task<StudentSubmittedExamsResponseDto> GetSubmittedExamsAsync(int studentId);
         Task<StudentStatisticsResponseDto> GetStudentStatisticsAsync(int studentId);
+
+        /// <summary>
+        /// Returns the student's answers alongside correct answers for a graded exam.
+        /// Throws if the attempt is not yet graded.
+        /// </summary>
+        Task<StudentExamReviewDto> GetExamReviewAsync(int examId, int studentId);
     }
 }

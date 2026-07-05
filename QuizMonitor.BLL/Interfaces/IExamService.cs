@@ -36,5 +36,11 @@ namespace QuizMonitor.BLL.Interfaces
         /// </summary>
         Task<DeleteExamResponseDto> DeleteExamAsync(int examId, int instructorId);
 
+        /// <summary>
+        /// Recent exams dashboard summary: student count, completion %, and flag count.
+        /// completionPercent/numberOfFlags are only populated once the exam is over.
+        /// </summary>
+        Task<List<InstructorRecentExamDto>> GetInstructorRecentExamsAsync(int instructorId);
+
     }
 }

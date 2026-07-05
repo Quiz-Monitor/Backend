@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using QuizMonitor.BLL.DTOs;
 using QuizMonitor.BLL.Interfaces;
@@ -357,6 +358,140 @@ namespace QuizMonitor.BLL.Services
             };
 
             return response;
+        }
+
+        public async Task<StudentExamReviewDto> GetExamReviewAsync(int examId, int studentId)
+        {
+            var student = await _unitOfWork.Users.GetByIdAsync(studentId);
+            if (student == null || !string.Equals(student.Role, "student", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UnauthorizedAccessException("Only students can access this endpoint");
+            }
+
+            var exam = await _unitOfWork.Exams.GetByIdAsync(examId);
+            if (exam == null || exam.DeletedAt != null)
+            {
+                throw new InvalidOperationException("Exam not found");
+            }
+
+            var attempt = await _unitOfWork.ExamAttempts.FirstOrDefaultAsync(
+                a => a.ExamId == examId && a.StudentId == studentId && a.DeletedAt == null);
+
+            if (attempt == null)
+            {
+                throw new InvalidOperationException("You have not joined this exam");
+            }
+
+            if (!string.Equals(attempt.Status, "graded", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Exam has not been graded yet");
+            }
+
+            // Load questions in order
+            var questions = (await _unitOfWork.Questions.FindAsync(
+                q => q.ExamId == examId && q.DeletedAt == null))
+                .OrderBy(q => q.OrderNumber)
+                .ToList();
+
+            // Load this attempt's answers
+            var answers = (await _unitOfWork.QuestionAnswers.FindAsync(
+                qa => qa.AttemptId == attempt.AttemptId && qa.DeletedAt == null))
+                .ToList();
+            var answerDict = answers.ToDictionary(a => a.QuestionId);
+
+            // Batch-load all choices for these questions
+            var questionIds = questions.Select(q => q.QuestionId).ToList();
+            var allChoices = (await _unitOfWork.Choices.FindAsync(
+                c => questionIds.Contains(c.QuestionId)))
+                .ToList();
+            var choicesByQuestion = allChoices
+                .GroupBy(c => c.QuestionId)
+                .ToDictionary(g => g.Key, g => g.OrderBy(c => c.OrderNumber).ToList());
+
+            var examTotalPoints = questions.Sum(q => q.Points);
+            var reviewQuestions = new List<ReviewQuestionDto>();
+
+            foreach (var q in questions)
+            {
+                answerDict.TryGetValue(q.QuestionId, out var answer);
+                var isMcq = q.QuestionType.ToLower().StartsWith("mcq");
+
+                List<ReviewChoiceDto>? reviewChoices = null;
+                string? studentAnswerText = null;
+                string? correctAnswerText = null;
+                bool? isCorrect = null;
+                string? feedback = null;
+
+                if (isMcq)
+                {
+                    choicesByQuestion.TryGetValue(q.QuestionId, out var choices);
+                    choices ??= new List<DAL.Models.Choice>();
+
+                    var selectedIds = new List<int>();
+                    if (!string.IsNullOrEmpty(answer?.SelectedChoices))
+                    {
+                        try
+                        {
+                            selectedIds = JsonSerializer.Deserialize<List<int>>(answer.SelectedChoices) ?? new List<int>();
+                        }
+                        catch (JsonException)
+                        {
+                            selectedIds = new List<int>();
+                        }
+                    }
+
+                    reviewChoices = choices.Select(c => new ReviewChoiceDto
+                    {
+                        ChoiceId = c.ChoiceId,
+                        Text = c.ChoiceText,
+                        IsCorrect = c.IsCorrect ?? false,
+                        IsSelected = selectedIds.Contains(c.ChoiceId)
+                    }).ToList();
+
+                    studentAnswerText = string.Join(", ",
+                        choices.Where(c => selectedIds.Contains(c.ChoiceId)).Select(c => c.ChoiceText));
+                    correctAnswerText = string.Join(", ",
+                        choices.Where(c => c.IsCorrect == true).Select(c => c.ChoiceText));
+                    isCorrect = answer?.IsCorrect;
+                }
+                else
+                {
+                    studentAnswerText = answer?.AnswerText;
+                    feedback = answer?.InstructorFeedback;
+                }
+
+                reviewQuestions.Add(new ReviewQuestionDto
+                {
+                    QuestionId = q.QuestionId,
+                    QuestionText = q.QuestionText,
+                    QuestionType = q.QuestionType,
+                    Points = q.Points,
+                    EarnedPoints = answer?.Score,
+                    OrderNumber = q.OrderNumber,
+                    StudentAnswer = studentAnswerText,
+                    CorrectAnswer = correctAnswerText,
+                    IsCorrect = isCorrect,
+                    InstructorFeedback = feedback,
+                    Choices = reviewChoices
+                });
+            }
+
+            decimal? scorePercentage = null;
+            if (attempt.FinalScore.HasValue && examTotalPoints > 0)
+            {
+                scorePercentage = Math.Round((attempt.FinalScore.Value / examTotalPoints) * 100, 1);
+            }
+
+            return new StudentExamReviewDto
+            {
+                ExamId = exam.ExamId,
+                ExamTitle = exam.Title,
+                ExamTotalPoints = examTotalPoints,
+                StudentScore = attempt.FinalScore,
+                ScorePercentage = scorePercentage,
+                Status = attempt.Status ?? string.Empty,
+                Questions = reviewQuestions
+            };
         }
     }
 }
